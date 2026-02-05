@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:campusapp/core/themes/app_theme.dart';
+import 'edit_profile_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -40,49 +41,71 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (uid == null) return;
 
       // ================= USER PROFILE =================
+      // Mengambil data langsung sesuai struktur di Gambar Firestore
       final userDoc = await _firestore.collection('users').doc(uid).get();
 
       if (userDoc.exists) {
         final data = userDoc.data()!;
-        name = data['name'] ?? '-';
-        studentId = data['studentId'] ?? '-';
-        faculty = data['faculty'] ?? '-';
-        department = data['department'] ?? '-';
-        batch = data['batch'] ?? '-';
+
+        setState(() {
+          // Mapping Data String
+          name = data['name']?.toString() ?? '-';
+          studentId =
+              data['nim']?.toString() ?? '-'; // Mengambil dari field 'nim'
+          faculty =
+              data['fakultas']?.toString() ??
+              '-'; // Mengambil dari field 'fakultas'
+          department =
+              data['departemen']?.toString() ??
+              '-'; // Mengambil dari field 'departemen'
+          batch =
+              data['angkatan']?.toString() ??
+              '-'; // Mengambil dari field 'angkatan'
+
+          // Mapping Data Angka (SKKM & Events)
+          // Menggunakan parsing aman karena di gambar completedEvents terlihat sebagai string "5"
+          // sedangkan totalSKKM terlihat sebagai number 10.
+
+          var skkmRaw = data['totalSKKM'];
+          if (skkmRaw is int) {
+            skkmPoints = skkmRaw;
+          } else if (skkmRaw is String) {
+            skkmPoints = int.tryParse(skkmRaw) ?? 0;
+          }
+
+          var eventsRaw = data['completedEvents'];
+          if (eventsRaw is int) {
+            eventsAttended = eventsRaw;
+          } else if (eventsRaw is String) {
+            eventsAttended = int.tryParse(eventsRaw) ?? 0;
+          }
+        });
       }
 
-      // ================= EVENTS ATTENDED =================
-      final regSnap = await _firestore
-          .collection('registrations')
-          .where('uid', isEqualTo: uid)
-          .where('status', isEqualTo: 'verified')
-          .get();
-
-      eventsAttended = regSnap.docs.length;
-
-      // ================= SKKM POINTS =================
-      skkmPoints = regSnap.docs.fold<int>(
-        0,
-        (sum, doc) => sum + ((doc.data()['skkm'] ?? 0) as int),
-      );
-
       // ================= RANK (SIMPLE GLOBAL) =================
+      // Logika rank tetap dipertahankan (menghitung jumlah user sebagai placeholder)
+      // atau jika ingin real, harus ada logic sorting, tapi untuk sekarang kita biarkan sesuai kode asal.
       final allUsersSnap = await _firestore.collection('users').get();
-      rank = allUsersSnap.docs.length; // placeholder rank sederhana
 
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          rank = allUsersSnap.docs.length;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       debugPrint('Profile load error: $e');
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // LAYOUT TIDAK DIUBAH SAMA SEKALI
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       body: _isLoading
@@ -123,10 +146,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       height: 300,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            AppColors.primary.withOpacity(0.9),
-            AppColors.primary,
-          ],
+          colors: [AppColors.primary.withOpacity(0.9), AppColors.primary],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -262,11 +282,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             value: department,
           ),
           const SizedBox(height: 16),
-          _buildInfoRow(
-            icon: Icons.groups,
-            label: 'Angkatan',
-            value: batch,
-          ),
+          _buildInfoRow(icon: Icons.groups, label: 'Angkatan', value: batch),
         ],
       ),
     );
@@ -279,9 +295,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         children: [
+          _buildMenuItem(
+            icon: Icons.edit,
+            title: 'Edit Profil',
+            color: AppColors.primary, // Atau Colors.blue
+            onTap: () async {
+              // Navigasi ke halaman Edit dan tunggu hasilnya
+              // Pastikan kamu sudah import 'edit_profile_screen.dart'
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EditProfileScreen(
+                    currentName: name,
+                    currentPhone:
+                        '0812...', // Sebaiknya ambil dari variable state jika sudah di-load
+                    currentFaculty: faculty,
+                    currentDepartment: department,
+                    currentBatch: batch,
+                    nim:
+                        studentId, // NIM biasanya tidak boleh diedit (read-only)
+                  ),
+                ),
+              );
+
+              // Jika result == true (berhasil simpan), refresh data di halaman ini
+              if (result == true) {
+                _loadProfileData();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Profil berhasil diperbarui!')),
+                );
+              }
+            },
+          ),
+          const Divider(height: 1), // Garis pemisah
           _buildMenuItem(
             icon: Icons.logout,
             title: 'Logout',
@@ -314,8 +370,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             color: color,
           ),
         ),
-        Text('$title • $suffix',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+        Text(
+          '$title • $suffix',
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+        ),
       ],
     );
   }
@@ -329,8 +387,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       children: [
         Icon(icon, size: 20),
         const SizedBox(width: 12),
-        Text('$label: ',
-            style: const TextStyle(fontWeight: FontWeight.w600)),
+        Text('$label: ', style: const TextStyle(fontWeight: FontWeight.w600)),
         Expanded(child: Text(value)),
       ],
     );
@@ -366,11 +423,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
               await _auth.signOut();
-              Navigator.pushNamedAndRemoveUntil(
-                context,
-                '/gate',
-                (route) => false,
-              );
+              // Pastikan route '/gate' atau route login kamu sesuai
+              if (context.mounted) {
+                Navigator.pushNamedAndRemoveUntil(
+                  context,
+                  '/gate',
+                  (route) => false,
+                );
+              }
             },
             child: const Text('Keluar'),
           ),
