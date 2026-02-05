@@ -10,7 +10,7 @@ class GateScreen extends StatelessWidget {
   // Fungsi untuk buka WhatsApp
 Future<void> _launchWhatsApp(BuildContext context) async {
     final phoneNumber = '6282129885601';
-    final message = 'Halo, saya tertarik dengan produk ini!';
+    final message = 'Pengajuan pembuatan akun CampusGo!';
     final encodedMessage = Uri.encodeFull(message);
     final whatsappUrl = 'https://wa.me/$phoneNumber?text=$encodedMessage';
     
