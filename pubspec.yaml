@@ -1,0 +1,41 @@
+name: campusapp
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ">=3.10.3 <4.0.0"  # PERBAIKAN: Tambahkan batasan atas
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Dependencies utama
+  url_launcher: ^6.2.2
+  shared_preferences: ^2.5.4
+  image_picker: ^1.0.4
+  
+  # Firebase
+  firebase_core: ^2.32.0
+  firebase_auth: ^4.17.8
+  cloud_firestore: ^4.15.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Poppins-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Poppins-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Poppins-Bold.ttf
+          weight: 700
