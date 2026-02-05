@@ -683,7 +683,7 @@ class _AdminCreateEventScreenState extends State<AdminCreateEventScreen> {
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(
-                color: error ? Colors.red : Colors.grey.shade400,
+                color: error ? const Color.fromARGB(255, 245, 65, 53) : Colors.grey.shade400,
               ),
             ),
             focusedBorder: OutlineInputBorder(
