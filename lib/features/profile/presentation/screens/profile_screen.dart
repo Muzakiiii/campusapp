@@ -40,58 +40,66 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final uid = _auth.currentUser?.uid;
       if (uid == null) return;
 
-      // ================= USER PROFILE =================
-      // Mengambil data langsung sesuai struktur di Gambar Firestore
+      // 1. AMBIL DATA USER
       final userDoc = await _firestore.collection('users').doc(uid).get();
 
       if (userDoc.exists) {
         final data = userDoc.data()!;
 
-        setState(() {
-          // Mapping Data String
-          name = data['name']?.toString() ?? '-';
-          studentId =
-              data['nim']?.toString() ?? '-'; // Mengambil dari field 'nim'
-          faculty =
-              data['fakultas']?.toString() ??
-              '-'; // Mengambil dari field 'fakultas'
-          department =
-              data['departemen']?.toString() ??
-              '-'; // Mengambil dari field 'departemen'
-          batch =
-              data['angkatan']?.toString() ??
-              '-'; // Mengambil dari field 'angkatan'
+        // Parsing data sementara ke variabel lokal
+        String tempName = data['name']?.toString() ?? '-';
+        String tempNim = data['nim']?.toString() ?? '-';
+        String tempFaculty = data['fakultas']?.toString() ?? '-';
+        String tempDept = data['departemen']?.toString() ?? '-';
+        String tempBatch = data['angkatan']?.toString() ?? '-';
 
-          // Mapping Data Angka (SKKM & Events)
-          // Menggunakan parsing aman karena di gambar completedEvents terlihat sebagai string "5"
-          // sedangkan totalSKKM terlihat sebagai number 10.
+        // Parsing SKKM (Pastikan jadi Integer untuk perhitungan Rank)
+        int tempSkkm = 0;
+        var skkmRaw = data['totalSKKM'];
+        if (skkmRaw is int) {
+          tempSkkm = skkmRaw;
+        } else if (skkmRaw is String) {
+          tempSkkm = int.tryParse(skkmRaw) ?? 0;
+        }
 
-          var skkmRaw = data['totalSKKM'];
-          if (skkmRaw is int) {
-            skkmPoints = skkmRaw;
-          } else if (skkmRaw is String) {
-            skkmPoints = int.tryParse(skkmRaw) ?? 0;
-          }
+        // Parsing Events
+        int tempEvents = 0;
+        var eventsRaw = data['completedEvents'];
+        if (eventsRaw is int) {
+          tempEvents = eventsRaw;
+        } else if (eventsRaw is String) {
+          tempEvents = int.tryParse(eventsRaw) ?? 0;
+        }
 
-          var eventsRaw = data['completedEvents'];
-          if (eventsRaw is int) {
-            eventsAttended = eventsRaw;
-          } else if (eventsRaw is String) {
-            eventsAttended = int.tryParse(eventsRaw) ?? 0;
-          }
-        });
-      }
+        // 2. HITUNG RANKING SEBENARNYA (Sesuai Leaderboard)
+        // Logika: Hitung jumlah user yang punya totalSKKM > skkm saya.
+        // Jika ada 3 orang yang poinnya lebih tinggi, berarti saya ranking 4.
 
-      // ================= RANK (SIMPLE GLOBAL) =================
-      // Logika rank tetap dipertahankan (menghitung jumlah user sebagai placeholder)
-      // atau jika ingin real, harus ada logic sorting, tapi untuk sekarang kita biarkan sesuai kode asal.
-      final allUsersSnap = await _firestore.collection('users').get();
+        final rankQuery = await _firestore
+            .collection('users')
+            .where('totalSKKM', isGreaterThan: tempSkkm)
+            .count()
+            .get();
 
-      if (mounted) {
-        setState(() {
-          rank = allUsersSnap.docs.length;
-          _isLoading = false;
-        });
+        // Jika count null, anggap 0 lalu tambah 1
+        int realRank = (rankQuery.count ?? 0) + 1;
+
+        // 3. UPDATE UI SEKALIGUS
+        if (mounted) {
+          setState(() {
+            name = tempName;
+            studentId = tempNim;
+            faculty = tempFaculty;
+            department = tempDept;
+            batch = tempBatch;
+
+            skkmPoints = tempSkkm;
+            eventsAttended = tempEvents;
+            rank = realRank; // Rank yang sudah sinkron
+
+            _isLoading = false;
+          });
+        }
       }
     } catch (e) {
       debugPrint('Profile load error: $e');
