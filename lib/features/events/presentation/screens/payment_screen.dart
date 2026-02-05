@@ -1,9 +1,7 @@
 // lib/features/events/presentation/screens/payment_screen.dart
-
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'dart:io';
 import 'package:image_picker/image_picker.dart';
-import 'package:campusapp/core/themes/app_theme.dart';
 import 'package:campusapp/features/events/domain/models/event_model.dart';
 import 'package:campusapp/features/events/domain/models/payment_model.dart';
 import 'package:campusapp/features/events/data/repositories/payment_repository.dart';
@@ -28,7 +26,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   PaymentMethod? _selectedMethod;
   Payment? _createdPayment;
-  File? _paymentProofImage;
+  Uint8List? _paymentProofImageBytes;
+  String? _paymentProofFileName;
   late TextEditingController _noteController;
   bool _isUploading = false;
   bool _showProofUpload = false;
@@ -56,8 +55,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
         )}';
   }
 
-  void _createPayment() {
-    _createdPayment = _paymentRepository.createPayment(
+  Future<void> _createPayment() async {
+    _createdPayment = await _paymentRepository.createPayment(
       event: widget.event,
       userId: widget.userId,
       method: PaymentMethod.transferBank,
@@ -67,11 +66,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Pembayaran Event'),
       ),
-      body: _createdPayment == null ? _buildLoading() : _buildContent(),
+      body: _createdPayment == null ? _buildLoading() : _buildContent(theme),
     );
   }
 
@@ -88,7 +89,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(ThemeData theme) {
     final payment = _createdPayment!;
 
     return SingleChildScrollView(
@@ -98,20 +99,20 @@ class _PaymentScreenState extends State<PaymentScreen> {
         children: [
           _buildOrderSummary(payment),
           const SizedBox(height: 30),
-          _buildPaymentMethods(),
+          _buildPaymentMethods(theme),
           const SizedBox(height: 20),
           if (_selectedMethod != null && !_showProofUpload)
             _buildPaymentDetails(),
-          if (_showProofUpload) _buildPaymentProofUpload(),
+          if (_showProofUpload) _buildPaymentProofUpload(theme),
           const SizedBox(height: 30),
-          _buildActionButtons(),
+          _buildActionButtons(theme),
         ],
       ),
     );
   }
 
   // ======================
-  // ORDER SUMMARY (FIXED)
+  // ORDER SUMMARY
   // ======================
   Widget _buildOrderSummary(Payment payment) {
     return Container(
@@ -143,7 +144,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      widget.event.judul, // ✅ FIX
+                      widget.event.judul,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -153,7 +154,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${widget.event.dateText} • ${widget.event.jamMulai}', // ✅ FIX
+                      '${widget.event.dateText} • ${widget.event.jamMulai}',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey.shade600,
@@ -170,7 +171,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
           _buildPriceDetail(
             'Biaya Event',
-            _formatRupiah(widget.event.hargaOnline), // ✅ FIX
+            _formatRupiah(widget.event.hargaOnline),
           ),
           _buildPriceDetail('Biaya Admin', _formatRupiah(2000)),
 
@@ -180,6 +181,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             'Total Pembayaran',
             _formatRupiah(payment.amount),
             isTotal: true,
+            themeColor: Theme.of(context).colorScheme.primary,
           ),
 
           const SizedBox(height: 12),
@@ -211,7 +213,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  Widget _buildPriceDetail(String label, String value, {bool isTotal = false}) {
+  Widget _buildPriceDetail(String label, String value, {
+    bool isTotal = false,
+    Color? themeColor,
+  }) {
+    final primaryColor = themeColor ?? Theme.of(context).colorScheme.primary;
+    
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -229,7 +236,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             style: TextStyle(
               fontSize: isTotal ? 18 : 14,
               fontWeight: FontWeight.w700,
-              color: isTotal ? AppColors.primary : Colors.black,
+              color: isTotal ? primaryColor : Colors.black,
             ),
           ),
         ],
@@ -240,8 +247,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
   // ======================
   // PAYMENT METHODS
   // ======================
-  Widget _buildPaymentMethods() {
+  Widget _buildPaymentMethods(ThemeData theme) {
     final methods = _paymentRepository.getPaymentMethods();
+    final primaryColor = theme.colorScheme.primary;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -251,12 +259,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 12),
-        ...methods.map(_buildPaymentMethodCard).toList(),
+        ...methods.map((method) => _buildPaymentMethodCard(method, primaryColor)).toList(),
       ],
     );
   }
 
-  Widget _buildPaymentMethodCard(PaymentMethodDetail method) {
+  Widget _buildPaymentMethodCard(PaymentMethodDetail method, Color primaryColor) {
     final isSelected = _selectedMethod == method.method;
 
     return Container(
@@ -264,23 +272,22 @@ class _PaymentScreenState extends State<PaymentScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isSelected ? AppColors.primary : Colors.grey.shade300,
+          color: isSelected ? primaryColor : Colors.grey.shade300,
           width: isSelected ? 2 : 1,
         ),
       ),
       child: ListTile(
-        leading: Icon(method.icon, color: AppColors.primary),
+        leading: Icon(method.icon, color: primaryColor),
         title: Text(method.name),
         subtitle: Text(method.description),
         trailing: isSelected
-            ? const Icon(Icons.check_circle, color: AppColors.primary)
+            ? Icon(Icons.check_circle, color: primaryColor)
             : const Icon(Icons.circle_outlined),
         onTap: () {
           setState(() {
             _selectedMethod = method.method;
             _showProofUpload = false;
-            _createdPayment =
-                _createdPayment!.copyWith(method: method.method);
+            _createdPayment = _createdPayment!.copyWith(method: method.method);
           });
         },
       ),
@@ -291,8 +298,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   // PAYMENT DETAILS
   // ======================
   Widget _buildPaymentDetails() {
-    final detail =
-        _paymentRepository.getPaymentMethodDetail(_selectedMethod!);
+    final detail = _paymentRepository.getPaymentMethodDetail(_selectedMethod!);
 
     if (detail == null) return const SizedBox();
 
@@ -334,9 +340,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   // ======================
-  // UPLOAD BUKTI
+  // UPLOAD BUKTI (FIXED FOR WEB)
   // ======================
-  Widget _buildPaymentProofUpload() {
+  Widget _buildPaymentProofUpload(ThemeData theme) {
+    final primaryColor = theme.colorScheme.primary;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -346,22 +354,84 @@ class _PaymentScreenState extends State<PaymentScreen> {
         ),
         const SizedBox(height: 12),
 
-        if (_paymentProofImage != null)
-          Image.file(_paymentProofImage!, height: 200),
+        if (_paymentProofImageBytes != null)
+          Container(
+            height: 200,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Image.memory(
+              _paymentProofImageBytes!,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  color: Colors.grey.shade200,
+                  child: const Center(
+                    child: Icon(Icons.broken_image, size: 50, color: Colors.grey),
+                  ),
+                );
+              },
+            ),
+          ),
 
-        const SizedBox(height: 12),
+        if (_paymentProofFileName != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'File: $_paymentProofFileName',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+          ),
+
+        const SizedBox(height: 16),
 
         TextField(
           controller: _noteController,
-          decoration: const InputDecoration(labelText: 'Catatan (opsional)'),
+          decoration: const InputDecoration(
+            labelText: 'Catatan (opsional)',
+            border: OutlineInputBorder(),
+            filled: true,
+            fillColor: Colors.white,
+          ),
+          maxLines: 3,
         ),
 
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
 
-        ElevatedButton.icon(
-          onPressed: _pickImage,
-          icon: const Icon(Icons.image),
-          label: const Text('Pilih Gambar'),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _pickImage,
+                icon: const Icon(Icons.image),
+                label: const Text('Pilih Gambar'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            if (_paymentProofImageBytes != null)
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _paymentProofImageBytes = null;
+                      _paymentProofFileName = null;
+                    });
+                  },
+                  icon: const Icon(Icons.delete),
+                  label: const Text('Hapus'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
+          ],
         ),
       ],
     );
@@ -370,7 +440,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
   // ======================
   // ACTION BUTTONS
   // ======================
-  Widget _buildActionButtons() {
+  Widget _buildActionButtons(ThemeData theme) {
+    final primaryColor = theme.colorScheme.primary;
+
     return Column(
       children: [
         if (!_showProofUpload)
@@ -382,6 +454,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   _showProofUpload = true;
                 });
               },
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                backgroundColor: primaryColor,
+                foregroundColor: Colors.white,
+              ),
               child: const Text('Upload Bukti Pembayaran'),
             ),
           ),
@@ -390,10 +467,24 @@ class _PaymentScreenState extends State<PaymentScreen> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: _isUploading ? null : _uploadPaymentProof,
+              onPressed: _isUploading || _paymentProofImageBytes == null 
+                  ? null 
+                  : _uploadPaymentProof,
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                backgroundColor: primaryColor,
+                foregroundColor: Colors.white,
+              ),
               child: _isUploading
-                  ? const CircularProgressIndicator()
-                  : const Text('Kirim Bukti'),
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text('Kirim Bukti Pembayaran'),
             ),
           ),
       ],
@@ -401,31 +492,44 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   // ======================
-  // IMAGE PICKER
+  // IMAGE PICKER (FIXED FOR WEB)
   // ======================
   Future<void> _pickImage() async {
-    final picked =
-        await _imagePicker.pickImage(source: ImageSource.gallery);
+    try {
+      final pickedFile = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
 
-    if (picked != null) {
-      setState(() {
-        _paymentProofImage = File(picked.path);
-      });
+      if (pickedFile != null) {
+        final bytes = await pickedFile.readAsBytes();
+        setState(() {
+          _paymentProofImageBytes = bytes;
+          _paymentProofFileName = pickedFile.name;
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal memilih gambar: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
   // ======================
-  // UPLOAD (SIMULASI)
+  // UPLOAD BUKTI
   // ======================
   Future<void> _uploadPaymentProof() async {
-    if (_paymentProofImage == null) return;
+    if (_paymentProofImageBytes == null) return;
 
     setState(() => _isUploading = true);
 
     try {
       final updated = await _paymentRepository.uploadPaymentProof(
         paymentId: _createdPayment!.id,
-        imageUrl: _paymentProofImage!.path,
+        imageBytes: _paymentProofImageBytes!,
         note: _noteController.text,
       );
 
@@ -433,13 +537,19 @@ class _PaymentScreenState extends State<PaymentScreen> {
         _createdPayment = updated;
         _isUploading = false;
         _showProofUpload = false;
+        _paymentProofImageBytes = null;
+        _paymentProofFileName = null;
+        _noteController.clear();
       });
 
       _showSuccessDialog();
     } catch (e) {
       setState(() => _isUploading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal upload: $e')),
+        SnackBar(
+          content: Text('Gagal upload bukti: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -449,7 +559,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Berhasil'),
-        content: const Text('Bukti pembayaran berhasil dikirim.'),
+        content: const Text('Bukti pembayaran berhasil dikirim. Tunggu verifikasi dari admin.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),

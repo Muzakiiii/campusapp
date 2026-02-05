@@ -1,3 +1,4 @@
+// lib/features/events/domain/models/payment_model.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -10,112 +11,6 @@ enum PaymentStatus {
   rejected,
   expired,
   cancelled,
-}
-
-// =============================
-// BANK
-// =============================
-class Bank {
-  final String name;
-  final String number;
-  final String holder;
-  final String? logoUrl;
-
-  Bank({
-    required this.name,
-    required this.number,
-    required this.holder,
-    this.logoUrl,
-  });
-
-  Map<String, dynamic> toMap() => {
-        'name': name,
-        'number': number,
-        'holder': holder,
-        'logoUrl': logoUrl,
-      };
-
-  factory Bank.fromMap(Map<String, dynamic> map) => Bank(
-        name: map['name'] ?? '',
-        number: map['number'] ?? '',
-        holder: map['holder'] ?? '',
-        logoUrl: map['logoUrl'],
-      );
-}
-
-// =============================
-// EWALLET
-// =============================
-class EWallet {
-  final String name;
-  final String number;
-  final String? logoUrl;
-
-  EWallet({required this.name, required this.number, this.logoUrl});
-
-  Map<String, dynamic> toMap() =>
-      {'name': name, 'number': number, 'logoUrl': logoUrl};
-
-  factory EWallet.fromMap(Map<String, dynamic> map) => EWallet(
-        name: map['name'] ?? '',
-        number: map['number'] ?? '',
-        logoUrl: map['logoUrl'],
-      );
-}
-
-// =============================
-// PAYMENT METHOD DETAIL (UI)
-// =============================
-class PaymentMethodDetail {
-  final PaymentMethod method;
-  final String name;
-  final String description;
-  final IconData icon;
-  final List<Bank>? banks;
-  final List<EWallet>? wallets;
-  final String? qrisCode;
-  final Color? color;
-
-  PaymentMethodDetail({
-    required this.method,
-    required this.name,
-    required this.description,
-    required this.icon,
-    this.banks,
-    this.wallets,
-    this.qrisCode,
-    this.color,
-  });
-
-  static IconData getIconFromMethod(PaymentMethod method) {
-    switch (method) {
-      case PaymentMethod.transferBank:
-        return Icons.account_balance;
-      case PaymentMethod.eWallet:
-        return Icons.wallet;
-      case PaymentMethod.qris:
-        return Icons.qr_code;
-      case PaymentMethod.virtualAccount:
-        return Icons.credit_card;
-      case PaymentMethod.creditCard:
-        return Icons.credit_score;
-    }
-  }
-
-  static Color getColorFromMethod(PaymentMethod method) {
-    switch (method) {
-      case PaymentMethod.transferBank:
-        return Colors.blue;
-      case PaymentMethod.eWallet:
-        return Colors.green;
-      case PaymentMethod.qris:
-        return Colors.purple;
-      case PaymentMethod.virtualAccount:
-        return Colors.orange;
-      case PaymentMethod.creditCard:
-        return Colors.red;
-    }
-  }
 }
 
 // =============================
@@ -156,7 +51,7 @@ class Payment {
     this.paymentCode,
   });
 
-    Payment copyWith({
+  Payment copyWith({
     String? id,
     String? eventId,
     String? userId,
@@ -186,38 +81,60 @@ class Payment {
       verifiedAt: verifiedAt ?? this.verifiedAt,
       paymentProofUrl: paymentProofUrl ?? this.paymentProofUrl,
       note: note ?? this.note,
-      virtualAccountNumber:
-          virtualAccountNumber ?? this.virtualAccountNumber,
+      virtualAccountNumber: virtualAccountNumber ?? this.virtualAccountNumber,
       qrisImageUrl: qrisImageUrl ?? this.qrisImageUrl,
       paymentCode: paymentCode ?? this.paymentCode,
     );
   }
 
-
   // =============================
-  // FROM FIRESTORE (WAJIB)
+  // FROM FIRESTORE (FIXED VERSION)
   // =============================
   factory Payment.fromFirestore(
     Map<String, dynamic> data,
     String documentId,
   ) {
+    print('Parsing payment data: $data');
+    
+    // Helper untuk konversi safe
+    String? safeString(dynamic value) {
+      if (value == null) return null;
+      if (value is String) return value;
+      if (value is int || value is double) return value.toString();
+      return value.toString();
+    }
+    
+    double safeDouble(dynamic value) {
+      if (value == null) return 0.0;
+      if (value is double) return value;
+      if (value is int) return value.toDouble();
+      if (value is String) return double.tryParse(value) ?? 0.0;
+      return 0.0;
+    }
+    
+    DateTime? safeTimestampToDate(dynamic timestamp) {
+      if (timestamp == null) return null;
+      if (timestamp is Timestamp) return timestamp.toDate();
+      if (timestamp is DateTime) return timestamp;
+      return null;
+    }
+
     return Payment(
       id: documentId,
-      eventId: data['eventId'] ?? '',
-      userId: data['userId'] ?? '',
-      eventTitle: data['eventTitle'] ?? '',
-      amount: (data['amount'] ?? 0).toDouble(),
-      method: _methodFromString(data['method']),
-      status: _statusFromString(data['status']),
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ??
-          DateTime.now(),
-      paidAt: (data['paidAt'] as Timestamp?)?.toDate(),
-      verifiedAt: (data['verifiedAt'] as Timestamp?)?.toDate(),
-      paymentProofUrl: data['paymentProofUrl'],
-      note: data['note'],
-      virtualAccountNumber: data['virtualAccountNumber'],
-      qrisImageUrl: data['qrisImageUrl'],
-      paymentCode: data['paymentCode'],
+      eventId: safeString(data['eventId']) ?? '',
+      userId: safeString(data['userId']) ?? '',
+      eventTitle: safeString(data['eventTitle']) ?? 'No Title',
+      amount: safeDouble(data['amount']),
+      method: _methodFromString(safeString(data['method'])),
+      status: _statusFromString(safeString(data['status'])),
+      createdAt: safeTimestampToDate(data['createdAt']) ?? DateTime.now(),
+      paidAt: safeTimestampToDate(data['paidAt']),
+      verifiedAt: safeTimestampToDate(data['verifiedAt']),
+      paymentProofUrl: safeString(data['paymentProofUrl']),
+      note: safeString(data['note']),
+      virtualAccountNumber: safeString(data['virtualAccountNumber']),
+      qrisImageUrl: safeString(data['qrisImageUrl']),
+      paymentCode: safeString(data['paymentCode']),
     );
   }
 
@@ -230,12 +147,11 @@ class Payment {
       'userId': userId,
       'eventTitle': eventTitle,
       'amount': amount,
-      'method': method.name, // STRING
-      'status': status.name, // STRING
+      'method': method.name,
+      'status': status.name,
       'createdAt': Timestamp.fromDate(createdAt),
       'paidAt': paidAt != null ? Timestamp.fromDate(paidAt!) : null,
-      'verifiedAt':
-          verifiedAt != null ? Timestamp.fromDate(verifiedAt!) : null,
+      'verifiedAt': verifiedAt != null ? Timestamp.fromDate(verifiedAt!) : null,
       'paymentProofUrl': paymentProofUrl,
       'note': note,
       'virtualAccountNumber': virtualAccountNumber,
@@ -248,23 +164,28 @@ class Payment {
   // HELPERS (STRING <-> ENUM)
   // =============================
   static PaymentMethod _methodFromString(String? value) {
-    switch (value) {
-      case 'eWallet':
+    final stringValue = value?.toLowerCase() ?? '';
+    switch (stringValue) {
+      case 'ewallet':
         return PaymentMethod.eWallet;
       case 'qris':
         return PaymentMethod.qris;
-      case 'virtualAccount':
+      case 'virtualaccount':
+      case 'virtual_account':
         return PaymentMethod.virtualAccount;
-      case 'creditCard':
+      case 'creditcard':
+      case 'credit_card':
         return PaymentMethod.creditCard;
-      case 'transferBank':
+      case 'transferbank':
+      case 'transfer_bank':
       default:
         return PaymentMethod.transferBank;
     }
   }
 
   static PaymentStatus _statusFromString(String? value) {
-    switch (value) {
+    final stringValue = value?.toLowerCase() ?? 'pending';
+    switch (stringValue) {
       case 'paid':
         return PaymentStatus.paid;
       case 'verified':
@@ -274,6 +195,7 @@ class Payment {
       case 'expired':
         return PaymentStatus.expired;
       case 'cancelled':
+      case 'canceled':
         return PaymentStatus.cancelled;
       case 'pending':
       default:
@@ -282,7 +204,7 @@ class Payment {
   }
 
   // =============================
-  // UI HELPERS (TETAP ADA)
+  // UI HELPERS
   // =============================
   String get methodName {
     switch (method) {
@@ -299,8 +221,20 @@ class Payment {
     }
   }
 
-  IconData get methodIcon =>
-      PaymentMethodDetail.getIconFromMethod(method);
+  IconData get methodIcon {
+    switch (method) {
+      case PaymentMethod.transferBank:
+        return Icons.account_balance;
+      case PaymentMethod.eWallet:
+        return Icons.wallet;
+      case PaymentMethod.qris:
+        return Icons.qr_code;
+      case PaymentMethod.virtualAccount:
+        return Icons.credit_card;
+      case PaymentMethod.creditCard:
+        return Icons.credit_score;
+    }
+  }
 
   Color get statusColor {
     switch (status) {
