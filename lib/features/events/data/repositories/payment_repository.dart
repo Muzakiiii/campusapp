@@ -80,7 +80,9 @@ class PaymentRepository {
     final paymentId = DateTime.now().millisecondsSinceEpoch.toString();
 
     const double adminFee = 2000;
-    final double eventPrice = event.hargaOnline;
+    final double eventPrice = event.onlinePrice > 0
+        ? event.onlinePrice.toDouble()
+        : event.offlinePrice.toDouble();
     final double totalAmount = eventPrice + adminFee;
 
     final payment = Payment(

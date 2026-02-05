@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:campusapp/core/themes/app_theme.dart';
 import 'package:campusapp/shared/widgets/custom_button.dart';
 import 'package:campusapp/features/events/domain/models/event_model.dart';
 import 'package:campusapp/features/admin/data/repositories/admin_event_repository.dart';
+import 'package:intl/intl.dart';
 
 class AdminEditEventScreen extends StatefulWidget {
   final String eventId;
@@ -10,40 +10,49 @@ class AdminEditEventScreen extends StatefulWidget {
   const AdminEditEventScreen({super.key, required this.eventId});
 
   @override
-  State<AdminEditEventScreen> createState() =>
-      _AdminEditEventScreenState();
+  State<AdminEditEventScreen> createState() => _AdminEditEventScreenState();
 }
 
-class _AdminEditEventScreenState
-    extends State<AdminEditEventScreen> {
-  final AdminEventRepository _eventRepository =
-      AdminEventRepository();
+class _AdminEditEventScreenState extends State<AdminEditEventScreen> {
+  final AdminEventRepository _eventRepository = AdminEventRepository();
   final _formKey = GlobalKey<FormState>();
 
   // Controllers
-  final _titleController = TextEditingController();
-  final _descriptionController = TextEditingController();
-  final _dateController = TextEditingController();
-  final _timeController = TextEditingController();
-  final _locationController = TextEditingController();
-  final _imageUrlController = TextEditingController();
-  final _priceController = TextEditingController();
+  final _judulController = TextEditingController();
+  final _deskripsiController = TextEditingController();
+  final _lokasiController = TextEditingController();
+  final _linkOnlineController = TextEditingController();
+  final _kuotaController = TextEditingController();
   final _skkmController = TextEditingController();
-  final _capacityController = TextEditingController();
+  final _hargaOnlineController = TextEditingController();
+  final _hargaOfflineController = TextEditingController();
+  final _jamMulaiController = TextEditingController();
+  final _jamSelesaiController = TextEditingController();
 
+  // State variables
   EventModel? _event;
   bool _isLoading = true;
   bool _isSaving = false;
-  String? _selectedCategory;
-  DateTime? _selectedDate;
+  String? _selectedKategori;
+  String? _selectedStatus;
+  DateTime? _selectedTanggal;
+  DateTime? _selectedBatasDaftar;
 
-  final List<String> _categories = [
-    'Teknologi',
-    'Kesehatan',
-    'Kepemimpinan',
-    'Seni & Budaya',
-    'Olahraga',
-    'Bisnis',
+  // Dropdown options
+  final List<String> _kategoriOptions = [
+    'Seminar',
+    'Workshop',
+    'Pelatihan',
+    'Lomba',
+    'Webinar',
+    'Lainnya'
+  ];
+
+  final List<String> _statusOptions = [
+    'pending',
+    'active',
+    'cancelled',
+    'completed'
   ];
 
   @override
@@ -57,8 +66,7 @@ class _AdminEditEventScreenState
   // =======================
   Future<void> _loadEvent() async {
     try {
-      final event =
-          await _eventRepository.getEventById(widget.eventId);
+      final event = await _eventRepository.getEventById(widget.eventId);
 
       if (event == null) {
         _showError('Event tidak ditemukan');
@@ -68,78 +76,56 @@ class _AdminEditEventScreenState
 
       setState(() {
         _event = event;
-        _selectedCategory = event.kategori;
-        _selectedDate = event.tanggal;
+        _selectedKategori = event.kategori;
+        _selectedStatus = event.status;
+        _selectedTanggal = event.tanggal;
+        _selectedBatasDaftar = event.batasDaftar;
 
-        _titleController.text = event.judul;
-        _descriptionController.text = event.deskripsi;
-        _locationController.text = event.lokasi;
-        _imageUrlController.text = event.posterUrl;
-        _dateController.text = event.dateText;
-        _timeController.text = event.jamMulai;
-        _priceController.text = event.hargaOnline.toStringAsFixed(0);
+        // Set controller values
+        _judulController.text = event.judul;
+        _deskripsiController.text = event.deskripsi;
+        _lokasiController.text = event.lokasi;
+        _linkOnlineController.text = event.linkOnline;
+        _kuotaController.text = event.kuota.toString();
         _skkmController.text = event.skkm.toString();
-        _capacityController.text = event.kuota.toString();
+        _hargaOnlineController.text = event.hargaOnline.toString();
+        _hargaOfflineController.text = event.hargaOffline.toString();
+        _jamMulaiController.text = event.jamMulai;
+        _jamSelesaiController.text = event.jamSelesai;
 
         _isLoading = false;
       });
     } catch (e) {
-      _showError('Gagal memuat data event');
+      _showError('Gagal memuat data event: $e');
       Navigator.pop(context);
     }
-  }
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _descriptionController.dispose();
-    _dateController.dispose();
-    _timeController.dispose();
-    _locationController.dispose();
-    _imageUrlController.dispose();
-    _priceController.dispose();
-    _skkmController.dispose();
-    _capacityController.dispose();
-    super.dispose();
   }
 
   // =======================
   // UPDATE EVENT
   // =======================
   Future<void> _updateEvent() async {
-    if (!_formKey.currentState!.validate() ||
-        _event == null ||
-        _selectedDate == null) return;
+    if (!_formKey.currentState!.validate() || _event == null) return;
 
     setState(() => _isSaving = true);
 
     try {
-      final updatedEvent = EventModel(
-        id: _event!.id,
-        judul: _titleController.text.trim(),
-        deskripsi: _descriptionController.text.trim(),
-        kategori: _selectedCategory ?? _event!.kategori,
-        lokasi: _locationController.text.trim(),
-        posterUrl: _imageUrlController.text.trim(),
-
-        tanggal: _selectedDate!,
-        batasDaftar: _selectedDate!, // sementara samakan
-
-        jamMulai: _timeController.text.trim(),
-        jamSelesai: _event!.jamSelesai,
-
-        kuota: int.tryParse(_capacityController.text) ?? 0,
-        jumlahPendaftar: _event!.jumlahPendaftar,
-        skkm: int.tryParse(_skkmController.text) ?? 0,
-
-        hargaOnline:
-            double.tryParse(_priceController.text) ?? 0,
-        hargaOffline: _event!.hargaOffline,
-
-        linkOnline: _event!.linkOnline,
-        status: _event!.status,
-
-        isBookmarked: _event!.isBookmarked,
+      final updatedEvent = _event!.copyWith(
+        judul: _judulController.text.trim(),
+        deskripsi: _deskripsiController.text.trim(),
+        kategori: _selectedKategori ?? _event!.kategori,
+        lokasi: _lokasiController.text.trim(),
+        linkOnline: _linkOnlineController.text.trim(),
+        tanggal: _selectedTanggal ?? _event!.tanggal,
+        batasDaftar: _selectedBatasDaftar ?? _event!.batasDaftar,
+        jamMulai: _jamMulaiController.text.trim(),
+        jamSelesai: _jamSelesaiController.text.trim(),
+        kuota: int.tryParse(_kuotaController.text) ?? _event!.kuota,
+        skkm: int.tryParse(_skkmController.text) ?? _event!.skkm,
+        hargaOnline: int.tryParse(_hargaOnlineController.text) ?? _event!.hargaOnline,
+        hargaOffline: int.tryParse(_hargaOfflineController.text) ?? _event!.hargaOffline,
+        status: _selectedStatus ?? _event!.status,
+        updatedAt: DateTime.now(),
       );
 
       await _eventRepository.updateEvent(updatedEvent);
@@ -149,83 +135,128 @@ class _AdminEditEventScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Event berhasil diperbarui!'),
-          backgroundColor: AppColors.success,
+          backgroundColor: Colors.green,
         ),
       );
 
       Navigator.pop(context);
     } catch (e) {
       setState(() => _isSaving = false);
-
-      _showError('Gagal memperbarui event');
+      _showError('Gagal memperbarui event: $e');
     }
   }
 
   // =======================
-  // DATE & TIME
+  // DATE PICKERS
   // =======================
-  Future<void> _selectDate() async {
+  Future<void> _selectTanggal() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate ?? DateTime.now(),
+      initialDate: _selectedTanggal ?? DateTime.now(),
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
 
     if (picked != null) {
-      _selectedDate = picked;
-      _dateController.text =
-          '${picked.day}/${picked.month}/${picked.year}';
-      setState(() {});
+      setState(() => _selectedTanggal = picked);
     }
   }
 
-  Future<void> _selectTime() async {
-    final picked = await showTimePicker(
+  Future<void> _selectBatasDaftar() async {
+    final picked = await showDatePicker(
       context: context,
-      initialTime: TimeOfDay.now(),
+      initialDate: _selectedBatasDaftar ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
     );
 
     if (picked != null) {
-      _timeController.text =
-          '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
-      setState(() {});
+      setState(() => _selectedBatasDaftar = picked);
     }
   }
 
   // =======================
-  // CATEGORY
+  // SHOW DIALOGS
   // =======================
-  void _showCategoryDialog() {
+  void _showKategoriDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Pilih Kategori'),
-        content: ListView.builder(
-          shrinkWrap: true,
-          itemCount: _categories.length,
-          itemBuilder: (context, index) {
-            final category = _categories[index];
-            return ListTile(
-              title: Text(category),
-              onTap: () {
-                setState(() => _selectedCategory = category);
-                Navigator.pop(context);
-              },
-            );
-          },
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: _kategoriOptions.length,
+            itemBuilder: (context, index) {
+              final kategori = _kategoriOptions[index];
+              return ListTile(
+                title: Text(kategori),
+                onTap: () {
+                  setState(() => _selectedKategori = kategori);
+                  Navigator.pop(context);
+                },
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showStatusDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Pilih Status'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: _statusOptions.length,
+            itemBuilder: (context, index) {
+              final status = _statusOptions[index];
+              return ListTile(
+                title: Text(status),
+                onTap: () {
+                  setState(() => _selectedStatus = status);
+                  Navigator.pop(context);
+                },
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppColors.error,
-      ),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // =======================
+  // DISPOSE
+  // =======================
+  @override
+  void dispose() {
+    _judulController.dispose();
+    _deskripsiController.dispose();
+    _lokasiController.dispose();
+    _linkOnlineController.dispose();
+    _kuotaController.dispose();
+    _skkmController.dispose();
+    _hargaOnlineController.dispose();
+    _hargaOfflineController.dispose();
+    _jamMulaiController.dispose();
+    _jamSelesaiController.dispose();
+    super.dispose();
   }
 
   // =======================
@@ -240,130 +271,401 @@ class _AdminEditEventScreenState
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Edit Event')),
-      body: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+      appBar: AppBar(
+        title: const Text('Edit Event'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.save),
+            onPressed: _isSaving ? null : _updateEvent,
+            tooltip: 'Simpan',
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Form(
+          key: _formKey,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Judul Event
               TextFormField(
-                controller: _titleController,
-                decoration:
-                    const InputDecoration(labelText: 'Judul Event'),
-                validator: (v) =>
-                    v == null || v.isEmpty
-                        ? 'Judul wajib diisi'
-                        : null,
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _descriptionController,
-                maxLines: 4,
-                decoration:
-                    const InputDecoration(labelText: 'Deskripsi'),
-                validator: (v) =>
-                    v == null || v.isEmpty
-                        ? 'Deskripsi wajib diisi'
-                        : null,
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                readOnly: true,
-                decoration: InputDecoration(
-                  labelText: 'Kategori',
-                  hintText:
-                      _selectedCategory ?? 'Pilih kategori',
-                  suffixIcon:
-                      const Icon(Icons.arrow_drop_down),
+                controller: _judulController,
+                decoration: const InputDecoration(
+                  labelText: 'Judul Event',
+                  border: OutlineInputBorder(),
                 ),
-                onTap: _showCategoryDialog,
-                validator: (_) =>
-                    _selectedCategory == null
-                        ? 'Pilih kategori'
-                        : null,
+                validator: (harga) => harga == null || harga.isEmpty ? 'Judul wajib diisi' : null,
               ),
               const SizedBox(height: 16),
 
+              // Kategori dan Status
               Row(
                 children: [
                   Expanded(
                     child: TextFormField(
-                      controller: _dateController,
                       readOnly: true,
-                      decoration: const InputDecoration(
-                          labelText: 'Tanggal'),
-                      onTap: _selectDate,
+                      decoration: InputDecoration(
+                        labelText: 'Kategori',
+                        hintText: _selectedKategori ?? 'Pilih kategori',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: const Icon(Icons.arrow_drop_down),
+                      ),
+                      onTap: _showKategoriDialog,
+                      validator: (_) => _selectedKategori == null ? 'Pilih kategori' : null,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: TextFormField(
-                      controller: _timeController,
                       readOnly: true,
-                      decoration: const InputDecoration(
-                          labelText: 'Jam Mulai'),
-                      onTap: _selectTime,
+                      decoration: InputDecoration(
+                        labelText: 'Status',
+                        hintText: _selectedStatus ?? 'Pilih status',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: const Icon(Icons.arrow_drop_down),
+                      ),
+                      onTap: _showStatusDialog,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
 
+              // Deskripsi
               TextFormField(
-                controller: _locationController,
-                decoration:
-                    const InputDecoration(labelText: 'Lokasi'),
-                validator: (v) =>
-                    v == null || v.isEmpty
-                        ? 'Lokasi wajib diisi'
-                        : null,
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _imageUrlController,
+                controller: _deskripsiController,
+                maxLines: 4,
                 decoration: const InputDecoration(
-                    labelText: 'URL Poster'),
+                  labelText: 'Deskripsi',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) => v == null || v.isEmpty ? 'Deskripsi wajib diisi' : null,
               ),
               const SizedBox(height: 16),
 
+              // Tanggal dan Batas Daftar
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: _selectTanggal,
+                      child: AbsorbPointer(
+                        child: TextFormField(
+                          decoration: InputDecoration(
+                            labelText: 'Tanggal Event',
+                            hintText: _selectedTanggal == null
+                                ? 'Pilih tanggal'
+                                : DateFormat('dd/MM/yyyy').format(_selectedTanggal!),
+                            border: const OutlineInputBorder(),
+                            suffixIcon: const Icon(Icons.calendar_today),
+                          ),
+                          validator: (_) => _selectedTanggal == null ? 'Pilih tanggal event' : null,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: _selectBatasDaftar,
+                      child: AbsorbPointer(
+                        child: TextFormField(
+                          decoration: InputDecoration(
+                            labelText: 'Batas Daftar',
+                            hintText: _selectedBatasDaftar == null
+                                ? 'Pilih batas daftar'
+                                : DateFormat('dd/MM/yyyy').format(_selectedBatasDaftar!),
+                            border: const OutlineInputBorder(),
+                            suffixIcon: const Icon(Icons.calendar_today),
+                          ),
+                          validator: (_) => _selectedBatasDaftar == null ? 'Pilih batas daftar' : null,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Jam Mulai dan Selesai
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _jamMulaiController,
+                      decoration: const InputDecoration(
+                        labelText: 'Jam Mulai',
+                        hintText: 'Contoh: 09.00',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Jam mulai wajib diisi';
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _jamSelesaiController,
+                      decoration: const InputDecoration(
+                        labelText: 'Jam Selesai',
+                        hintText: 'Contoh: 12.00',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Jam selesai wajib diisi';
+                        return null;
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Lokasi
               TextFormField(
-                controller: _priceController,
-                keyboardType: TextInputType.number,
+                controller: _lokasiController,
                 decoration: const InputDecoration(
-                    labelText: 'Harga Online'),
+                  labelText: 'Lokasi',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) => v == null || v.isEmpty ? 'Lokasi wajib diisi' : null,
               ),
               const SizedBox(height: 16),
 
+              // Link Online
               TextFormField(
-                controller: _skkmController,
-                keyboardType: TextInputType.number,
-                decoration:
-                    const InputDecoration(labelText: 'SKKM'),
+                controller: _linkOnlineController,
+                decoration: const InputDecoration(
+                  labelText: 'Link Online (Opsional)',
+                  border: OutlineInputBorder(),
+                ),
               ),
               const SizedBox(height: 16),
 
-              TextFormField(
-                controller: _capacityController,
-                keyboardType: TextInputType.number,
-                decoration:
-                    const InputDecoration(labelText: 'Kuota'),
+              // Kuota dan SKKM
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _kuotaController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Kuota',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Kuota wajib diisi';
+                        final kuota = int.tryParse(v);
+                        if (kuota == null || kuota <= 0) return 'Kuota harus > 0';
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _skkmController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Poin SKKM',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Poin SKKM wajib diisi';
+                        final skkm = int.tryParse(v);
+                        if (skkm == null || skkm < 0) return 'Poin SKKM harus >= 0';
+                        return null;
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Harga Online dan Offline
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _hargaOnlineController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Harga Online (Rp)',
+                        hintText: '0 untuk gratis',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (harga) {
+                        if (harga == null || harga.isEmpty) return 'Harga online wajib diisi';
+                        final hargaValue = int.tryParse(harga);
+                        if (hargaValue == null || hargaValue < 0) return 'Harga tidak valid';
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _hargaOfflineController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Harga Offline (Rp)',
+                        hintText: '0 untuk gratis',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Harga offline wajib diisi';
+                        final harga = int.tryParse(v);
+                        if (harga == null || harga < 0) return 'Harga tidak valid';
+                        return null;
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // Save Button
+              CustomButton(
+                onPressed: _isSaving ? null : _updateEvent,
+                isLoading: _isSaving,
+                text: 'Simpan Perubahan',
+                backgroundColor: Colors.blue,
+                textColor: Colors.white,
+              ),
+              const SizedBox(height: 16),
+
+              // Cancel Button
+              OutlinedButton(
+                onPressed: _isSaving
+                    ? null
+                    : () {
+                        Navigator.pop(context);
+                      },
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  side: BorderSide(color: Colors.grey.shade400),
+                ),
+                child: const Text(
+                  'Batal',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey,
+                  ),
+                ),
               ),
               const SizedBox(height: 32),
 
-              CustomButton(
-                onPressed: _isSaving ? () {} : _updateEvent,
-                text: 'Simpan Perubahan',
-                isLoading: _isSaving,
-                width: double.infinity,
+              // Danger Zone
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.red.shade300),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Zona Berbahaya',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Tindakan ini tidak dapat dibatalkan. Event yang dihapus tidak dapat dikembalikan.',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _showDeleteConfirmation,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red.shade50,
+                          foregroundColor: Colors.red,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(color: Colors.red.shade300),
+                          ),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.delete_outline, size: 20),
+                            SizedBox(width: 8),
+                            Text('Hapus Event'),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  // =======================
+  // DELETE EVENT
+  // =======================
+  void _showDeleteConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hapus Event'),
+        content: const Text(
+          'Apakah Anda yakin ingin menghapus event ini? Tindakan ini tidak dapat dibatalkan.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteEvent();
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteEvent() async {
+    setState(() => _isSaving = true);
+
+    try {
+      await _eventRepository.deleteEvent(widget.eventId);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Event berhasil dihapus!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      Navigator.pop(context);
+    } catch (e) {
+      setState(() => _isSaving = false);
+      _showError('Gagal menghapus event: $e');
+    }
   }
 }

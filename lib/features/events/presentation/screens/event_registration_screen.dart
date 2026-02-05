@@ -17,7 +17,7 @@ class EventRegistrationScreen extends StatelessWidget {
       event.hargaOnline > 0 || event.hargaOffline > 0;
 
   double get _priceAmount =>
-      event.hargaOnline > 0 ? event.hargaOnline : event.hargaOffline;
+      event.hargaOnline > 0 ? event.hargaOnline.toDouble() : event.hargaOffline.toDouble();
 
   @override
   Widget build(BuildContext context) {

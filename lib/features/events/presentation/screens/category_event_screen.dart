@@ -37,7 +37,7 @@ class _kategoriEventsScreenState extends State<kategoriEventsScreen> {
 
     try {
       final events = await widget.eventRepository
-          .getEventsBykategori(widget.kategori); // FIX: TANPA .name
+          .getEventsByKategori(widget.kategori); // FIX: TANPA .name
 
       setState(() {
         _events = events;

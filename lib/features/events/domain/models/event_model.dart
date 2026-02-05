@@ -4,30 +4,33 @@ import 'package:flutter/material.dart';
 class EventModel {
   final String id;
 
-  // === FIRESTORE ASLI ===
-  final String judul;
-  final String deskripsi;
-  final String kategori;
-  final String lokasi;
-  final String posterUrl;
+  // === STRUKTUR FIREBASE ASLI ===
+  final String judul;            // dari field "judul"
+  final String deskripsi;        // dari field "deskripsi"
+  final String kategori;         // dari field "kategori"
+  final String lokasi;           // dari field "lokasi"
+  final String posterUrl;        // dari field "posterUrl"
+  final String linkOnline;       // dari field "linkOnline"
 
-  final DateTime tanggal;        // untuk upcoming / past
-  final DateTime batasDaftar;
+  final DateTime tanggal;        // dari field "tanggal"
+  final DateTime batasDaftar;    // dari field "batasDaftar"
 
-  final String jamMulai;
-  final String jamSelesai;
+  final String jamMulai;         // dari field "jamMulai" (format: "09.00")
+  final String jamSelesai;       // dari field "jamSelesai" (format: "12.00")
 
-  final int kuota;
-  final int jumlahPendaftar;
-  final int skkm;
+  final int kuota;               // dari field "kuota"
+  final int jumlahPendaftar;     // dari field "jumlahPendaftar"
+  final int skkm;                // dari field "skkm"
 
-  final double hargaOnline;
-  final double hargaOffline;
+  final int hargaOnline;         // dari field "hargaOnline"
+  final int hargaOffline;        // dari field "hargaOffline"
 
-  final String linkOnline;
-  final String status;
+  final String status;           // dari field "status"
 
-  // === TAMBAHAN FITUR (TETAP ADA) ===
+  final DateTime createdAt;      // dari field "createdAt"
+  final DateTime updatedAt;      // dari field "updatedAt"
+
+  // === TAMBAHAN UNTUK UI ===
   final bool isBookmarked;
 
   EventModel({
@@ -37,6 +40,7 @@ class EventModel {
     required this.kategori,
     required this.lokasi,
     required this.posterUrl,
+    required this.linkOnline,
     required this.tanggal,
     required this.batasDaftar,
     required this.jamMulai,
@@ -46,13 +50,30 @@ class EventModel {
     required this.skkm,
     required this.hargaOnline,
     required this.hargaOffline,
-    required this.linkOnline,
     required this.status,
+    required this.createdAt,
+    required this.updatedAt,
     this.isBookmarked = false,
   });
 
   // ========================
-  // UI HELPERS (TETAP ADA)
+  // GETTER UNTUK KOMPATIBILITAS DENGAN KODE LAMA
+  // ========================
+  String get name => judul;
+  String get description => deskripsi;
+  String get category => kategori;
+  String get location => lokasi;
+  DateTime get date => tanggal;
+  DateTime get deadline => batasDaftar;
+  String get startTime => jamMulai;
+  String get endTime => jamSelesai;
+  int get quota => kuota;
+  int get onlinePrice => hargaOnline;
+  int get offlinePrice => hargaOffline;
+  String get onlineLink => linkOnline;
+
+  // ========================
+  // UI HELPERS
   // ========================
   Color get categoryColor {
     switch (kategori.toLowerCase()) {
@@ -60,10 +81,19 @@ class EventModel {
         return Colors.blue;
       case 'workshop':
         return Colors.green;
-      case 'competition':
+      case 'kompetisi':
+      case 'lomba':
         return Colors.orange;
-      default:
+      case 'pelatihan':
         return Colors.purple;
+      case 'webinar':
+        return Colors.red;
+      case 'teknologi':
+        return Colors.blue.shade700;
+      case 'kesehatan':
+        return Colors.green.shade700;
+      default:
+        return Colors.grey;
     }
   }
 
@@ -73,8 +103,17 @@ class EventModel {
         return Icons.school;
       case 'workshop':
         return Icons.build;
-      case 'competition':
+      case 'kompetisi':
+      case 'lomba':
         return Icons.emoji_events;
+      case 'pelatihan':
+        return Icons.people;
+      case 'webinar':
+        return Icons.video_call;
+      case 'teknologi':
+        return Icons.computer;
+      case 'kesehatan':
+        return Icons.health_and_safety;
       default:
         return Icons.event;
     }
@@ -86,47 +125,57 @@ class EventModel {
 
   bool get isGratis => hargaOnline == 0 && hargaOffline == 0;
 
+  String get formattedTime {
+    // Format: "09.00" tetap seperti itu, atau konversi jika perlu
+    return jamMulai;
+  }
+
+  String get formattedEndTime {
+    return jamSelesai;
+  }
+
   // ========================
   // FIRESTORE SERIALIZATION
   // ========================
   factory EventModel.fromFirestore(
-    Map<String, dynamic> map,
-    String docId,
+    DocumentSnapshot doc,
   ) {
-    final Timestamp? tanggalTs = map['tanggal'];
-    final Timestamp? batasDaftarTs = map['batasDaftar'];
-
+    final map = doc.data() as Map<String, dynamic>;
+    
+    // Helper untuk parsing
+    DateTime parseTimestamp(Timestamp? ts, DateTime fallback) {
+      return ts != null ? ts.toDate() : fallback;
+    }
+    
+    int parseInt(dynamic value) => (value as num?)?.toInt() ?? 0;
+    String parseString(dynamic value) => value?.toString() ?? '';
+    
     return EventModel(
-      id: docId,
-      judul: map['judul'] ?? '',
-      deskripsi: map['deskripsi'] ?? '',
-      kategori: map['kategori'] ?? '',
-      lokasi: map['lokasi'] ?? '',
-      posterUrl: map['posterUrl'] ?? '',
-
-      tanggal: tanggalTs != null ? tanggalTs.toDate() : DateTime.now(),
-      batasDaftar:
-          batasDaftarTs != null ? batasDaftarTs.toDate() : DateTime.now(),
-
-      jamMulai: map['jamMulai'] ?? '',
-      jamSelesai: map['jamSelesai'] ?? '',
-
-      kuota: map['kuota'] ?? 0,
-      jumlahPendaftar: map['jumlahPendaftar'] ?? 0,
-      skkm: map['skkm'] ?? 0,
-
-      hargaOnline: (map['hargaOnline'] as num?)?.toDouble() ?? 0,
-      hargaOffline: (map['hargaOffline'] as num?)?.toDouble() ?? 0,
-
-      linkOnline: map['linkOnline'] ?? '',
-      status: map['status'] ?? '',
-
-      isBookmarked: map['isBookmarked'] ?? false,
+      id: doc.id,
+      judul: parseString(map['judul']),
+      deskripsi: parseString(map['deskripsi']),
+      kategori: parseString(map['kategori']),
+      lokasi: parseString(map['lokasi']),
+      posterUrl: parseString(map['posterUrl']),
+      linkOnline: parseString(map['linkOnline']),
+      tanggal: parseTimestamp(map['tanggal'] as Timestamp?, DateTime.now()),
+      batasDaftar: parseTimestamp(map['batasDaftar'] as Timestamp?, DateTime.now()),
+      jamMulai: parseString(map['jamMulai']),
+      jamSelesai: parseString(map['jamSelesai']),
+      kuota: parseInt(map['kuota']),
+      jumlahPendaftar: parseInt(map['jumlahPendaftar']),
+      skkm: parseInt(map['skkm']),
+      hargaOnline: parseInt(map['hargaOnline']),
+      hargaOffline: parseInt(map['hargaOffline']),
+      status: parseString(map['status']),
+      createdAt: parseTimestamp(map['createdAt'] as Timestamp?, DateTime.now()),
+      updatedAt: parseTimestamp(map['updatedAt'] as Timestamp?, DateTime.now()),
+      isBookmarked: map['isBookmarked'] == true,
     );
   }
 
   // ========================
-  // TO FIRESTORE (BARU - WAJIB)
+  // TO FIRESTORE
   // ========================
   Map<String, dynamic> toFirestore() {
     return {
@@ -135,6 +184,7 @@ class EventModel {
       'kategori': kategori,
       'lokasi': lokasi,
       'posterUrl': posterUrl,
+      'linkOnline': linkOnline,
       'tanggal': Timestamp.fromDate(tanggal),
       'batasDaftar': Timestamp.fromDate(batasDaftar),
       'jamMulai': jamMulai,
@@ -144,15 +194,15 @@ class EventModel {
       'skkm': skkm,
       'hargaOnline': hargaOnline,
       'hargaOffline': hargaOffline,
-      'linkOnline': linkOnline,
       'status': status,
-      // ❌ JANGAN simpan id ke Firestore
-      // ❌ isBookmarked biasanya LOCAL UI, tidak perlu disimpan
+      'createdAt': Timestamp.fromDate(createdAt),
+      'updatedAt': Timestamp.fromDate(updatedAt),
+      // Jangan simpan id dan isBookmarked ke Firestore
     };
   }
 
   // ========================
-  // COPY WITH (DIPERLUAS)
+  // COPY WITH
   // ========================
   EventModel copyWith({
     String? id,
@@ -161,6 +211,7 @@ class EventModel {
     String? kategori,
     String? lokasi,
     String? posterUrl,
+    String? linkOnline,
     DateTime? tanggal,
     DateTime? batasDaftar,
     String? jamMulai,
@@ -168,10 +219,11 @@ class EventModel {
     int? kuota,
     int? jumlahPendaftar,
     int? skkm,
-    double? hargaOnline,
-    double? hargaOffline,
-    String? linkOnline,
+    int? hargaOnline,
+    int? hargaOffline,
     String? status,
+    DateTime? createdAt,
+    DateTime? updatedAt,
     bool? isBookmarked,
   }) {
     return EventModel(
@@ -181,6 +233,7 @@ class EventModel {
       kategori: kategori ?? this.kategori,
       lokasi: lokasi ?? this.lokasi,
       posterUrl: posterUrl ?? this.posterUrl,
+      linkOnline: linkOnline ?? this.linkOnline,
       tanggal: tanggal ?? this.tanggal,
       batasDaftar: batasDaftar ?? this.batasDaftar,
       jamMulai: jamMulai ?? this.jamMulai,
@@ -190,9 +243,46 @@ class EventModel {
       skkm: skkm ?? this.skkm,
       hargaOnline: hargaOnline ?? this.hargaOnline,
       hargaOffline: hargaOffline ?? this.hargaOffline,
-      linkOnline: linkOnline ?? this.linkOnline,
       status: status ?? this.status,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
       isBookmarked: isBookmarked ?? this.isBookmarked,
     );
+  }
+
+  // ========================
+  // VALIDATION METHODS
+  // ========================
+  bool get isValid {
+    return judul.isNotEmpty &&
+        deskripsi.isNotEmpty &&
+        kategori.isNotEmpty &&
+        lokasi.isNotEmpty;
+  }
+
+  bool get isFull {
+    return jumlahPendaftar >= kuota;
+  }
+
+  bool get canRegister {
+    return !isFull && batasDaftar.isAfter(DateTime.now());
+  }
+
+  // ========================
+  // FORMATTED PRICE STRING
+  // ========================
+  String get formattedOnlinePrice {
+    if (hargaOnline == 0) return 'Gratis';
+    return 'Rp $hargaOnline';
+  }
+
+  String get formattedOfflinePrice {
+    if (hargaOffline == 0) return 'Gratis';
+    return 'Rp $hargaOffline';
+  }
+
+  @override
+  String toString() {
+    return 'EventModel(id: $id, judul: $judul, kategori: $kategori, tanggal: $dateText)';
   }
 }
