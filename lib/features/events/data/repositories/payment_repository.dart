@@ -1,12 +1,31 @@
 // lib/features/events/data/repositories/payment_repository.dart
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:campusapp/features/events/domain/models/event_model.dart';
 import 'package:campusapp/features/events/domain/models/payment_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 
+// ==============================
+// CLOUDINARY CONFIG
+// ==============================
+// Di bagian atas file payment_repository.dart
+class CloudinaryConfig {
+  // HANYA cloudName dan uploadPreset yang diperlukan
+  static const String cloudName = 'dvf7f78gl';
+  static const String uploadPreset = 'ml_default';
+  static const String folder = 'campusapp/payment_proofs';
+  
+  // URL tanpa API key
+  static String get uploadUrl => 
+      'https://api.cloudinary.com/v1_1/$cloudName/image/upload';
+}
+
+// ==============================
+// PAYMENT METHOD MODELS
+// ==============================
 class Bank {
   final String name;
   final String number;
@@ -51,9 +70,11 @@ class PaymentMethodDetail {
   });
 }
 
+// ==============================
+// PAYMENT REPOSITORY (CLOUDINARY VERSION)
+// ==============================
 class PaymentRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final firebase_storage.FirebaseStorage _storage = firebase_storage.FirebaseStorage.instance;
   final List<PaymentMethodDetail> _paymentMethods = [];
 
   PaymentRepository() {
@@ -118,7 +139,23 @@ class PaymentRepository {
   }
 
   // ==============================
-  // BUAT PEMBAYARAN BARU DAN SIMPAN KE FIRESTORE
+  // HELPER METHOD
+  // ==============================
+  Future<T> _executeWithTimeout<T>(
+    Future<T> Function() operation, {
+    required Duration timeout,
+    required String operationName,
+  }) async {
+    try {
+      return await operation().timeout(timeout);
+    } on TimeoutException {
+      print('⏰ Timeout during $operationName');
+      throw TimeoutException('$operationName timeout');
+    }
+  }
+
+  // ==============================
+  // 1. BUAT PEMBAYARAN BARU
   // ==============================
   Future<Payment> createPayment({
     required EventModel event,
@@ -127,16 +164,16 @@ class PaymentRepository {
   }) async {
     try {
       print('🔄 Membuat pembayaran untuk event: ${event.judul}');
-      print('👤 User ID: $userId');
-      print('💰 Metode: ${method.toString()}');
 
       // Validasi input
-      if (userId.isEmpty) {
-        throw Exception('User ID tidak valid');
-      }
+      if (userId.isEmpty) throw Exception('User ID tidak valid');
+      if (event.id.isEmpty) throw Exception('Event ID tidak valid');
 
-      if (event.id.isEmpty) {
-        throw Exception('Event ID tidak valid');
+      // Cek apakah user sudah memiliki pembayaran untuk event ini
+      final existingPayment = await getPaymentByEventAndUser(event.id, userId);
+      if (existingPayment != null) {
+        print('⚠️ User sudah memiliki pembayaran untuk event ini');
+        return existingPayment;
       }
 
       // Hitung total amount
@@ -145,13 +182,6 @@ class PaymentRepository {
           ? event.hargaOnline.toDouble()
           : event.hargaOffline.toDouble();
       final double totalAmount = eventPrice + adminFee;
-
-      // Cek apakah user sudah memiliki pembayaran untuk event ini
-      final existingPayment = await getPaymentByEventAndUser(event.id, userId);
-      if (existingPayment != null) {
-        print('⚠️ User sudah memiliki pembayaran untuk event ini');
-        return existingPayment;
-      }
 
       // Generate payment ID dan code
       final paymentId = DateTime.now().millisecondsSinceEpoch.toString();
@@ -173,13 +203,9 @@ class PaymentRepository {
             : null,
       );
 
-      print('📝 Data pembayaran yang akan disimpan:');
-      print('  ID: $paymentId');
-      print('  Kode: $paymentCode');
-      print('  Jumlah: $totalAmount');
-      print('  Status: ${payment.status}');
+      print('📝 Data pembayaran: $paymentId | Kode: $paymentCode | Jumlah: $totalAmount');
 
-      // Simpan ke Firestore dengan timeout
+      // Simpan ke Firestore
       await _executeWithTimeout(
         () async {
           await _firestore
@@ -191,24 +217,13 @@ class PaymentRepository {
         operationName: 'Menyimpan ke Firestore',
       );
 
-      // Verifikasi data tersimpan
-      final verifyDoc = await _firestore
-          .collection('payments')
-          .doc(paymentId)
-          .get()
-          .timeout(Duration(seconds: 10));
-
-      if (!verifyDoc.exists) {
-        throw Exception('Gagal memverifikasi penyimpanan data');
-      }
-
       print('✅ Payment created successfully: $paymentId');
       return payment;
     } on TimeoutException catch (e) {
       print('⏰ Timeout creating payment: $e');
-      throw Exception('Timeout: Gagal membuat pembayaran. Cek koneksi internet Anda.');
+      throw Exception('Timeout: Gagal membuat pembayaran. Cek koneksi internet.');
     } on FirebaseException catch (e) {
-      print('🔥 Firebase error creating payment: ${e.code} - ${e.message}');
+      print('🔥 Firebase error: ${e.code} - ${e.message}');
       
       String errorMessage = 'Gagal membuat pembayaran';
       switch (e.code) {
@@ -216,25 +231,16 @@ class PaymentRepository {
           errorMessage = 'Akses ditolak. Pastikan Anda sudah login.';
           break;
         case 'unavailable':
-          errorMessage = 'Firebase tidak tersedia. Coba lagi nanti.';
+          errorMessage = 'Server tidak tersedia. Coba lagi nanti.';
           break;
         case 'network-request-failed':
           errorMessage = 'Gagal koneksi ke server. Cek koneksi internet.';
           break;
       }
-      
       throw Exception('$errorMessage (${e.code})');
     } catch (e) {
       print('❌ Error creating payment: $e');
-      
-      // Format error message lebih user-friendly
-      if (e.toString().contains('connection') || e.toString().contains('network')) {
-        throw Exception('Gagal koneksi ke server. Periksa koneksi internet Anda dan coba lagi.');
-      } else if (e.toString().contains('permission')) {
-        throw Exception('Tidak memiliki izin untuk membuat pembayaran. Pastikan Anda sudah login.');
-      } else {
-        throw Exception('Gagal membuat pembayaran: ${e.toString().split(':').last.trim()}');
-      }
+      throw Exception('Gagal membuat pembayaran: ${e.toString().split(':').last.trim()}');
     }
   }
 
@@ -247,142 +253,183 @@ class PaymentRepository {
   }
 
   // ==============================
-  // HELPER: EXECUTE WITH TIMEOUT
+  // 2. UPLOAD GAMBAR KE CLOUDINARY
   // ==============================
-  Future<void> _executeWithTimeout(
-    Future<void> Function() operation,
-    {
-      required Duration timeout,
-      required String operationName,
-    }
+  Future<String> _uploadImageToCloudinary(
+    Uint8List imageBytes, 
+    String paymentId,
+    String userId,
   ) async {
     try {
-      await operation().timeout(timeout);
-    } on TimeoutException {
-      throw TimeoutException('$operationName timeout setelah ${timeout.inSeconds} detik');
-    }
-  }
+      print('☁️ Mengupload gambar ke Cloudinary');
+      print('📁 Payment ID: $paymentId | User ID: $userId');
+      print('📦 Ukuran file: ${imageBytes.length} bytes');
 
-  // ==============================
-  // UPLOAD BUKTI PEMBAYARAN KE FIREBASE STORAGE
-  // ==============================
-  Future<String> _uploadImageToStorage(
-      Uint8List imageBytes, String paymentId) async {
-    try {
-      print('🔄 Mengupload gambar untuk payment: $paymentId');
-      print('📁 Ukuran file: ${imageBytes.length} bytes');
-      
-      final fileName = 'payment_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final storageRef = _storage.ref().child('payment_proofs/$paymentId/$fileName');
-      
-      final uploadTask = storageRef.putData(
-        imageBytes,
-        firebase_storage.SettableMetadata(contentType: 'image/jpeg'),
-      );
-      
-      // Tambah timeout untuk upload
-      final snapshot = await uploadTask
-          .timeout(Duration(seconds: 30))
-          .onError((error, stackTrace) {
-            throw TimeoutException('Upload gambar timeout setelah 30 detik');
-          });
-      
-      final downloadUrl = await snapshot.ref.getDownloadURL();
-      
-      print('✅ Image uploaded successfully: ${downloadUrl.substring(0, 50)}...');
-      return downloadUrl;
-    } on firebase_storage.FirebaseException catch (e) {
-      print('🔥 Storage error: ${e.code} - ${e.message}');
-      
-      String errorMessage = 'Gagal mengupload gambar';
-      switch (e.code) {
-        case 'unauthorized':
-          errorMessage = 'Tidak memiliki izin untuk upload gambar';
-          break;
-        case 'bucket-not-found':
-          errorMessage = 'Storage bucket tidak ditemukan';
-          break;
-        case 'object-not-found':
-          errorMessage = 'File tidak ditemukan';
-          break;
-        case 'quota-exceeded':
-          errorMessage = 'Quota storage telah terlampaui';
-          break;
+      // Validasi ukuran file (maks 10MB)
+      if (imageBytes.length > 10 * 1024 * 1024) {
+        throw Exception('Ukuran gambar terlalu besar (maks 10MB)');
       }
-      
-      throw Exception('$errorMessage (${e.code})');
+
+      // Generate nama file yang unik
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'payment_${userId}_${paymentId}_$timestamp.jpg';
+
+      // Buat multipart request ke Cloudinary
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse(CloudinaryConfig.uploadUrl),
+      );
+
+      // Tambah fields yang diperlukan
+      request.fields['upload_preset'] = CloudinaryConfig.uploadPreset;
+      request.fields['folder'] = CloudinaryConfig.folder;
+      request.fields['public_id'] = fileName;
+
+      // Tambah file image
+      request.files.add(http.MultipartFile.fromBytes(
+        'file',
+        imageBytes,
+        filename: fileName,
+      ));
+
+      print('🚀 Mengirim request ke Cloudinary...');
+
+      // Kirim request dengan timeout lebih lama (60 detik)
+      final response = await request.send().timeout(
+        Duration(seconds: 60),
+        onTimeout: () {
+          throw TimeoutException('Upload gambar timeout setelah 60 detik');
+        },
+      );
+
+      // Baca response
+      final responseString = await response.stream.bytesToString();
+      print('📥 Response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(responseString);
+        final imageUrl = responseData['secure_url'] ?? responseData['url'];
+        
+        if (imageUrl == null) {
+          throw Exception('URL gambar tidak ditemukan dalam response Cloudinary');
+        }
+
+        print('✅ Upload berhasil: ${imageUrl.substring(0, 50)}...');
+        return imageUrl.toString();
+      } else {
+        final errorData = jsonDecode(responseString);
+        final errorMessage = errorData['error']?['message'] ?? 'Unknown error';
+        throw Exception('Cloudinary error: $errorMessage');
+      }
+    } on TimeoutException catch (e) {
+      print('⏰ Timeout uploading to Cloudinary: $e');
+      throw Exception('Upload gambar timeout. Pastikan koneksi internet stabil.');
+    } on http.ClientException catch (e) {
+      print('🌐 Network error: $e');
+      throw Exception('Gagal terhubung ke server Cloudinary. Cek koneksi internet.');
     } catch (e) {
-      print('❌ Error uploading image: $e');
+      print('❌ Error uploading to Cloudinary: $e');
       throw Exception('Gagal mengupload gambar: ${e.toString().split(':').last.trim()}');
     }
   }
 
   // ==============================
-  // UPLOAD BUKTI PEMBAYARAN
+  // 3. UPLOAD BUKTI PEMBAYARAN (UTAMA)
   // ==============================
-  Future<Payment> uploadPaymentProof({
-    required String paymentId,
-    required Uint8List imageBytes,
-    String? note,
-  }) async {
-    try {
-      print('🔄 Uploading payment proof for: $paymentId');
-      
-      // Validasi input
-      if (imageBytes.isEmpty) {
-        throw Exception('Gambar tidak valid');
-      }
-      
-      if (imageBytes.length > 10 * 1024 * 1024) { // 10MB limit
-        throw Exception('Ukuran gambar terlalu besar (maks 10MB)');
-      }
-
-      // 1. Upload image ke Firebase Storage
-      final imageUrl = await _uploadImageToStorage(imageBytes, paymentId);
-
-      // 2. Update payment di Firestore
-      final updatedData = {
-        'paymentProofUrl': imageUrl,
-        'status': 'paid',
-        'paidAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        if (note != null && note.isNotEmpty) 'note': note,
-      };
-
-      await _executeWithTimeout(
-        () async {
-          await _firestore
-              .collection('payments')
-              .doc(paymentId)
-              .update(updatedData);
-        },
-        timeout: Duration(seconds: 15),
-        operationName: 'Update payment status',
-      );
-
-      // 3. Ambil data terbaru dengan timeout
-      final doc = await _firestore.collection('payments').doc(paymentId)
-          .get()
-          .timeout(Duration(seconds: 10));
-          
-      if (!doc.exists) {
-        throw Exception('Payment tidak ditemukan setelah update');
-      }
-
-      final updatedPayment = Payment.fromFirestore(doc.data()!, doc.id);
-      print('✅ Payment proof uploaded successfully');
-      return updatedPayment;
-    } on TimeoutException catch (e) {
-      print('⏰ Timeout uploading payment proof: $e');
-      throw Exception('Timeout: Gagal upload bukti pembayaran. Coba lagi.');
-    } catch (e) {
-      print('❌ Error uploading payment proof: $e');
-      throw Exception('Gagal upload bukti pembayaran: ${e.toString().split(':').last.trim()}');
+Future<Payment> uploadPaymentProof({
+  required String paymentId,
+  required String userId,
+  required Uint8List imageBytes,
+  String? note,
+}) async {
+  try {
+    print('=== 🐛 DEBUGGING PERMISSION START ===');
+    
+    // 1. Cek auth state
+    print('👤 User ID from parameter: $userId');
+    
+    // 2. Cek apakah payment document ada dan bisa dibaca
+    print('🔍 Checking payment document: $paymentId');
+    final paymentDoc = await _firestore.collection('payments').doc(paymentId).get();
+    
+    if (!paymentDoc.exists) {
+      print('❌ Payment document tidak ditemukan!');
+      throw Exception('Payment tidak ditemukan');
     }
+    
+    print('✅ Document ditemukan');
+    print('📄 Document data: ${paymentDoc.data()}');
+    
+    // 3. Cek apakah user adalah pemilik
+    final paymentUserId = paymentDoc.data()?['userId'];
+    print('🔐 Payment user ID: $paymentUserId');
+    print('🔐 Request user ID: $userId');
+    
+    if (paymentUserId != userId) {
+      print('❌ PERMISSION DENIED: User bukan pemilik payment!');
+      throw Exception('Anda tidak memiliki izin untuk mengupdate payment ini');
+    }
+    
+    // 4. Cek status saat ini
+    final currentStatus = paymentDoc.data()?['status'];
+    print('📊 Current status: $currentStatus');
+    
+    if (currentStatus != 'pending') {
+      print('❌ Status tidak valid untuk upload. Harus "pending", tapi sekarang "$currentStatus"');
+      throw Exception('Payment sudah tidak dalam status pending');
+    }
+    
+    print('=== ✅ SEMUA CHECK PASSED ===');
+    
+    // Lanjutkan dengan upload Cloudinary...
+    print('☁️ Mulai upload ke Cloudinary...');
+    final imageUrl = await _uploadImageToCloudinary(imageBytes, paymentId, userId);
+    
+    print('✅ Cloudinary upload berhasil: $imageUrl');
+    
+    // 5. Data yang akan diupdate
+    final updatedData = {
+      'paymentProofUrl': imageUrl,
+      'status': 'paid',
+      'paidAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      if (note != null && note.isNotEmpty) 'note': note,
+    };
+    
+    print('📝 Data update yang akan dikirim:');
+    updatedData.forEach((key, value) {
+      print('   $key: $value');
+    });
+    
+    // 6. Coba update dengan timeout
+    print('🔄 Mengupdate Firestore...');
+    try {
+      await _firestore
+          .collection('payments')
+          .doc(paymentId)
+          .update(updatedData);
+      print('✅ Firestore update berhasil!');
+    } on FirebaseException catch (e) {
+      print('❌ FirebaseException: ${e.code} - ${e.message}');
+      print('❌ Full error: $e');
+      rethrow;
+    }
+    
+    // 7. Verifikasi update
+    final updatedDoc = await _firestore.collection('payments').doc(paymentId).get();
+    print('✅ Verifikasi berhasil. Status baru: ${updatedDoc.data()?['status']}');
+    
+    return Payment.fromFirestore(updatedDoc.data()!, updatedDoc.id);
+    
+  } catch (e) {
+    print('❌ ERROR DETAIL: $e');
+    print('❌ Stack trace: ${e.toString()}');
+    rethrow;
   }
+}
 
   // ==============================
-  // GET PAYMENT BY ID
+  // 4. GET PAYMENT BY ID
   // ==============================
   Future<Payment?> getPayment(String paymentId) async {
     try {
@@ -409,7 +456,7 @@ class PaymentRepository {
   }
 
   // ==============================
-  // GET USER PAYMENTS
+  // 5. GET USER PAYMENTS
   // ==============================
   Future<List<Payment>> getUserPayments(String userId) async {
     try {
@@ -436,7 +483,7 @@ class PaymentRepository {
   }
 
   // ==============================
-  // GET PAYMENT BY EVENT AND USER
+  // 6. GET PAYMENT BY EVENT AND USER
   // ==============================
   Future<Payment?> getPaymentByEventAndUser(
       String eventId, String userId) async {
@@ -468,7 +515,7 @@ class PaymentRepository {
   }
 
   // ==============================
-  // GET PAYMENT METHODS (UI)
+  // 7. GET PAYMENT METHODS (UI)
   // ==============================
   List<PaymentMethodDetail> getPaymentMethods() {
     return _paymentMethods;
@@ -483,7 +530,7 @@ class PaymentRepository {
   }
 
   // ==============================
-  // VERIFIKASI PEMBAYARAN (ADMIN)
+  // 8. VERIFIKASI PEMBAYARAN (ADMIN)
   // ==============================
   Future<Payment> verifyPayment(
     String paymentId, {
@@ -534,7 +581,7 @@ class PaymentRepository {
   }
 
   // ==============================
-  // CANCEL PAYMENT
+  // 9. CANCEL PAYMENT
   // ==============================
   Future<void> cancelPayment(String paymentId, {String? reason}) async {
     try {
@@ -566,7 +613,7 @@ class PaymentRepository {
   }
 
   // ==============================
-  // PAYMENT STATISTICS
+  // 10. PAYMENT STATISTICS
   // ==============================
   Future<Map<String, dynamic>> getPaymentStatistics(String userId) async {
     try {
@@ -618,7 +665,7 @@ class PaymentRepository {
   }
 
   // ==============================
-  // DELETE PAYMENT (Hanya untuk development/testing)
+  // 11. DELETE PAYMENT
   // ==============================
   Future<void> deletePayment(String paymentId) async {
     try {
@@ -638,7 +685,7 @@ class PaymentRepository {
   }
 
   // ==============================
-  // STREAM PAYMENTS FOR REAL-TIME UPDATES
+  // 12. STREAM PAYMENTS FOR REAL-TIME UPDATES
   // ==============================
   Stream<List<Payment>> streamUserPayments(String userId) {
     return _firestore
@@ -648,7 +695,6 @@ class PaymentRepository {
         .snapshots()
         .handleError((error) {
           print('❌ Stream error: $error');
-          // Return empty list on error
           return Stream.value([]);
         })
         .map((snapshot) => snapshot.docs
@@ -666,7 +712,7 @@ class PaymentRepository {
   }
 
   // ==============================
-  // CHECK IF USER HAS PAID FOR EVENT
+  // 13. CHECK IF USER HAS PAID FOR EVENT
   // ==============================
   Future<bool> hasUserPaidForEvent(String eventId, String userId) async {
     try {
@@ -687,16 +733,32 @@ class PaymentRepository {
   }
 
   // ==============================
-  // CHECK FIREBASE CONNECTION
+  // 14. CHECK FIREBASE CONNECTION
   // ==============================
   Future<bool> checkConnection() async {
     try {
-      // Coba akses Firestore dengan timeout singkat
       await _firestore.collection('payments').limit(1).get().timeout(Duration(seconds: 5));
       print('✅ Firebase connection OK');
       return true;
     } catch (e) {
       print('❌ Firebase connection error: $e');
+      return false;
+    }
+  }
+  
+  // ==============================
+  // 15. CHECK CLOUDINARY CONNECTION
+  // ==============================
+  Future<bool> checkCloudinaryConnection() async {
+    try {
+      // Coba ping Cloudinary API
+      final response = await http.get(
+        Uri.parse('https://api.cloudinary.com/v1_1/${CloudinaryConfig.cloudName}/ping')
+      ).timeout(Duration(seconds: 10));
+      
+      return response.statusCode == 200;
+    } catch (e) {
+      print('❌ Cloudinary connection error: $e');
       return false;
     }
   }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:campusapp/features/events/domain/models/event_model.dart';
 import 'package:campusapp/features/events/domain/models/payment_model.dart';
 import 'package:campusapp/features/events/data/repositories/payment_repository.dart';
@@ -763,17 +764,30 @@ class _PaymentScreenState extends State<PaymentScreen> {
   // UPLOAD BUKTI
   // ======================
   Future<void> _uploadPaymentProof() async {
-    if (_paymentProofImageBytes == null) return;
+    if (_paymentProofImageBytes == null || _createdPayment == null) return;
 
     setState(() => _isUploading = true);
-
+    
     try {
+      print('=== 🎬 UPLOAD PROOF START ===');
+      print('📱 Payment ID: ${_createdPayment!.id}');
+      print('📱 User ID: ${widget.userId}');
+      print('📱 Image size: ${_paymentProofImageBytes!.length} bytes');
+      
+      // Debug: cek data payment sebelum upload
+      final paymentRepo = PaymentRepository();
+      final currentPayment = await paymentRepo.getPayment(_createdPayment!.id);
+      print('🔍 Current payment data: ${currentPayment?.toFirestore()}');
+      
       final updated = await _paymentRepository.uploadPaymentProof(
         paymentId: _createdPayment!.id,
+        userId: widget.userId, // PASTIKAN ini ada
         imageBytes: _paymentProofImageBytes!,
-        note: _noteController.text,
+        note: _noteController.text.isEmpty ? null : _noteController.text,
       );
 
+      print('✅ Upload berhasil! Status baru: ${updated.status}');
+      
       setState(() {
         _createdPayment = updated;
         _isUploading = false;
@@ -784,19 +798,37 @@ class _PaymentScreenState extends State<PaymentScreen> {
       });
 
       _showSuccessDialog();
-    } on TimeoutException catch (e) {
+      
+    } on FirebaseException catch (e) {
+      print('🔥 FIREBASE ERROR: ${e.code} - ${e.message}');
+      print('🔥 Full error: $e');
+      
       setState(() => _isUploading = false);
+      
+      // Tampilkan error detail
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Upload timeout. Coba lagi.'),
-          backgroundColor: Colors.orange,
+          content: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Gagal upload: ${e.code}'),
+              Text('Detail: ${e.message}', style: TextStyle(fontSize: 12)),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 5),
         ),
       );
+      
     } catch (e) {
+      print('❌ GENERAL ERROR: $e');
+      print('❌ Error type: ${e.runtimeType}');
+      
       setState(() => _isUploading = false);
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal upload bukti: ${e.toString().replaceAll('Exception: ', '')}'),
+          content: Text('Gagal upload bukti: ${e.toString()}'),
           backgroundColor: Colors.red,
         ),
       );
