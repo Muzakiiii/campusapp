@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'dart:typed_data';
+// ignore: unused_import
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:campusapp/features/events/data/repositories/event_repository.dart';
 
 class AdminCreateEventScreen extends StatefulWidget {
   const AdminCreateEventScreen({super.key});
@@ -15,6 +17,7 @@ class AdminCreateEventScreen extends StatefulWidget {
 
 class _AdminCreateEventScreenState extends State<AdminCreateEventScreen> {
   final _scrollController = ScrollController();
+  final EventRepository _eventRepository = EventRepository();
 
   // Controllers
   final _judulController = TextEditingController();
@@ -36,7 +39,8 @@ class _AdminCreateEventScreenState extends State<AdminCreateEventScreen> {
   
   // Image picker
   File? _posterFile;
-  Uint8List? _posterWeb;
+  Uint8List? _posterBytes;
+  String? _posterFileName;
 
   bool _isSaving = false;
 
@@ -88,22 +92,34 @@ class _AdminCreateEventScreenState extends State<AdminCreateEventScreen> {
   Future<void> _pickPoster() async {
     try {
       final ImagePicker picker = ImagePicker();
-      final XFile? picked = await picker.pickImage(source: ImageSource.gallery);
+      final XFile? picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 1200,
+      );
 
       if (picked == null) return;
 
       if (kIsWeb) {
+        // Untuk web
         final bytes = await picked.readAsBytes();
         setState(() {
-          _posterWeb = bytes;
+          _posterBytes = bytes;
           _posterFile = null;
+          _posterFileName = picked.name;
         });
       } else {
+        // Untuk mobile
+        final file = File(picked.path);
+        final bytes = await file.readAsBytes();
         setState(() {
-          _posterFile = File(picked.path);
-          _posterWeb = null;
+          _posterFile = file;
+          _posterBytes = bytes;
+          _posterFileName = picked.name;
         });
       }
+      
+      print('📸 Gambar dipilih: $_posterFileName (${_posterBytes?.length ?? 0} bytes)');
     } catch (e) {
       _showError('Gagal memilih gambar: $e');
     }
@@ -142,7 +158,7 @@ class _AdminCreateEventScreenState extends State<AdminCreateEventScreen> {
     return true;
   }
 
-  // ================= BUAT EVENT =================
+  // ================= BUAT EVENT DENGAN CLOUDINARY =================
   Future<void> _createEvent() async {
     if (!_validateForm()) {
       _showError('Lengkapi semua field wajib');
@@ -152,8 +168,6 @@ class _AdminCreateEventScreenState extends State<AdminCreateEventScreen> {
     setState(() => _isSaving = true);
 
     try {
-      final firestore = FirebaseFirestore.instance;
-
       // Validasi waktu format "09.00"
       if (!_isValidTimeFormat(_jamMulaiController.text) ||
           !_isValidTimeFormat(_jamSelesaiController.text)) {
@@ -192,41 +206,75 @@ class _AdminCreateEventScreenState extends State<AdminCreateEventScreen> {
         return;
       }
 
-      // NOTE: Untuk upload gambar ke Firebase Storage, 
-      // Anda perlu implementasi terpisah dan dapatkan URL-nya
-      // Saat ini kita set kosong dulu
-      final String posterUrl = '';
-
-      final now = DateTime.now();
-
-      await firestore.collection('events').add({
+      print('🔄 Membuat event dengan gambar...');
+      
+      // Siapkan data event
+      final eventData = {
         'judul': _judulController.text.trim(),
         'deskripsi': _deskripsiController.text.trim(),
         'kategori': _selectedKategori,
         'lokasi': _lokasiController.text.trim(),
-        'posterUrl': posterUrl,
         'linkOnline': _linkOnlineController.text.trim(),
-        'tanggal': Timestamp.fromDate(_selectedTanggal!),
-        'batasDaftar': Timestamp.fromDate(_selectedBatasDaftar!),
+        'tanggal': _selectedTanggal!,
+        'batasDaftar': _selectedBatasDaftar!,
         'jamMulai': _jamMulaiController.text.trim(),
         'jamSelesai': _jamSelesaiController.text.trim(),
         'kuota': kuota,
-        'jumlahPendaftar': 0,
         'skkm': int.tryParse(_skkmController.text) ?? 0,
         'hargaOnline': hargaOnline,
         'hargaOffline': hargaOffline,
         'status': _selectedStatus,
-        'createdAt': Timestamp.fromDate(now),
-        'updatedAt': Timestamp.fromDate(now),
-      });
+      };
 
-      _showSuccess('Event berhasil dibuat');
+      // Gunakan repository untuk create event dengan gambar
+      await _eventRepository.createEventWithImage(
+        eventData: eventData,
+        imageBytes: _posterBytes,
+      );
+
+      _showSuccess('✅ Event berhasil dibuat dengan gambar!');
+      
+      // Clear form
+      _clearForm();
+      
+      // Delay dan kembali
+      await Future.delayed(const Duration(seconds: 1));
       Navigator.pop(context);
+      
     } catch (e) {
+      print('❌ Error creating event: $e');
       _showError('Gagal menyimpan event: $e');
     } finally {
       setState(() => _isSaving = false);
     }
+  }
+
+  // ================= CLEAR FORM =================
+  void _clearForm() {
+    _judulController.clear();
+    _deskripsiController.clear();
+    _lokasiController.clear();
+    _linkOnlineController.clear();
+    _kuotaController.clear();
+    _skkmController.clear();
+    _hargaOnlineController.clear();
+    _hargaOfflineController.clear();
+    _jamMulaiController.clear();
+    _jamSelesaiController.clear();
+    
+    setState(() {
+      _selectedKategori = 'Seminar';
+      _selectedStatus = 'pending';
+      _selectedTanggal = null;
+      _selectedBatasDaftar = null;
+      _posterFile = null;
+      _posterBytes = null;
+      _posterFileName = null;
+      
+      // Reset error flags
+      _errJudul = _errDeskripsi = _errTanggal = _errBatasDaftar = false;
+      _errJamMulai = _errJamSelesai = _errLokasi = _errKuota = _errSKKM = false;
+    });
   }
 
   // ================= PICKER TANGGAL =================
@@ -321,6 +369,7 @@ class _AdminCreateEventScreenState extends State<AdminCreateEventScreen> {
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -330,6 +379,7 @@ class _AdminCreateEventScreenState extends State<AdminCreateEventScreen> {
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.green,
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -607,6 +657,11 @@ class _AdminCreateEventScreenState extends State<AdminCreateEventScreen> {
               color: Colors.black87,
             ),
           ),
+          const SizedBox(height: 8),
+          Text(
+            'Upload gambar menarik untuk event Anda',
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+          ),
           const SizedBox(height: 12),
           GestureDetector(
             onTap: _pickPoster,
@@ -616,36 +671,107 @@ class _AdminCreateEventScreenState extends State<AdminCreateEventScreen> {
               decoration: BoxDecoration(
                 color: Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
+                border: Border.all(
+                  color: Colors.grey.shade300,
+                  style: BorderStyle.solid,
+                ),
               ),
-              child: _posterWeb != null
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.memory(_posterWeb!, fit: BoxFit.cover),
-                    )
-                  : _posterFile != null
-                      ? ClipRRect(
+              child: _posterBytes != null
+                  ? Stack(
+                      children: [
+                        ClipRRect(
                           borderRadius: BorderRadius.circular(12),
-                          child: Image.file(_posterFile!, fit: BoxFit.cover),
-                        )
-                      : Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.image, size: 48, color: Colors.grey),
-                            const SizedBox(height: 8),
-                            const Text('Klik untuk upload poster'),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Format: JPG, PNG. Maks: 5MB',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
+                          child: kIsWeb
+                              ? Image.memory(_posterBytes!, fit: BoxFit.cover)
+                              : _posterFile != null
+                                  ? Image.file(_posterFile!, fit: BoxFit.cover)
+                                  : Container(),
+                        ),
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Icon(
+                              Icons.edit,
+                              size: 18,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        if (_posterFileName != null)
+                          Positioned(
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.only(
+                                  bottomLeft: Radius.circular(12),
+                                  bottomRight: Radius.circular(12),
+                                ),
+                              ),
+                              child: Text(
+                                _posterFileName!,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                          ],
+                          ),
+                      ],
+                    )
+                  : Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.add_photo_alternate,
+                            size: 48, color: Colors.grey),
+                        const SizedBox(height: 8),
+                        const Text('Klik untuk upload poster'),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Format: JPG, PNG. Maks: 5MB',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
                         ),
+                      ],
+                    ),
             ),
           ),
+          const SizedBox(height: 12),
+          if (_posterBytes != null)
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _posterFile = null;
+                        _posterBytes = null;
+                        _posterFileName = null;
+                      });
+                    },
+                    icon: const Icon(Icons.delete, size: 18),
+                    label: const Text('Hapus Gambar'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                    ),
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -683,7 +809,7 @@ class _AdminCreateEventScreenState extends State<AdminCreateEventScreen> {
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(
-                color: error ? const Color.fromARGB(255, 245, 65, 53) : Colors.grey.shade400,
+                color: error ? Colors.red : Colors.grey.shade400,
               ),
             ),
             focusedBorder: OutlineInputBorder(
