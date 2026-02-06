@@ -85,6 +85,40 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     Navigator.pushNamed(context, Routes.adminPaymentVerification);
   }
 
+  // Fungsi untuk menampilkan konfirmasi logout
+  void _showLogoutConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Konfirmasi Logout'),
+        content: const Text('Apakah Anda yakin ingin keluar dari akun admin?'),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'Batal',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context); // Tutup dialog
+              _logout(); // Panggil fungsi logout
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _logout() {
     Navigator.pushReplacementNamed(context, Routes.gate);
   }
@@ -96,7 +130,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         title: const Text('Dashboard Admin'),
         actions: [
           IconButton(
-            onPressed: _logout,
+            onPressed: _showLogoutConfirmation, // Panggil fungsi konfirmasi
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
           ),

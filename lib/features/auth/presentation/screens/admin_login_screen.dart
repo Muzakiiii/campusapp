@@ -86,8 +86,31 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
+                // Back Button - TAMBAHAN
+                Container(
+                  alignment: Alignment.centerLeft,
+                  margin: const EdgeInsets.only(bottom: 10),
+                  child: IconButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
+                    icon: Icon(
+                      Icons.arrow_back_ios,
+                      color: AppColors.textSecondary,
+                      size: 24,
+                    ),
+                    style: IconButton.styleFrom(
+                      padding: const EdgeInsets.all(12),
+                      backgroundColor: AppColors.primary.withOpacity(0.1),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+
                 // Header Section
-                const SizedBox(height: 40),
+                const SizedBox(height: 20),
                 Container(
                   width: 120,
                   height: 120,
@@ -105,7 +128,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     color: AppColors.primary,
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
                 Text(
                   'Admin Portal',
                   style: TextStyle(
@@ -123,7 +146,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     color: AppColors.textSecondary,
                   ),
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 32),
 
                 // Form Section
                 Container(
@@ -223,7 +246,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                                 : null,
                           ),
                         ),
-                        const SizedBox(height: 32),
+                        const SizedBox(height: 28),
                         
                         // Login Button
                         CustomButton(
@@ -240,7 +263,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                 ),
 
                 // Info Section
-                const SizedBox(height: 32),
+                const SizedBox(height: 28),
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(

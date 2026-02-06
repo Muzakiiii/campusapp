@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:campusapp/core/themes/app_theme.dart';
-// import 'package:campusapp/shared/widgets/custom_button.dart';
 import 'package:campusapp/shared/widgets/custom_text_field.dart';
 import 'package:campusapp/app/routes.dart';
 
@@ -439,9 +438,32 @@ class _LoginScreenState extends State<LoginScreen> {
               key: _formKey,
               child: Column(
                 children: [
+                  // Back Button - TAMBAHAN
+                  Container(
+                    alignment: Alignment.centerLeft,
+                    margin: const EdgeInsets.only(bottom: 20),
+                    child: IconButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                      icon: Icon(
+                        Icons.arrow_back_ios,
+                        color: Colors.grey[600],
+                        size: 24,
+                      ),
+                      style: IconButton.styleFrom(
+                        padding: const EdgeInsets.all(12),
+                        backgroundColor: Colors.grey[100],
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+
                   // Header Section
                   SizedBox(
-                    height: screenHeight * 0.2,
+                    height: screenHeight * 0.18,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -475,42 +497,42 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 20),
                         Text(
-                          'Campus App',
+                          'CampusGo',
                           style: TextStyle(
-                            fontSize: 28,
+                            fontSize: 20,
                             fontWeight: FontWeight.bold,
                             color: Colors.blue[800],
                             letterSpacing: 0.5,
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Portal Mahasiswa',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey[600],
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
+                        // const SizedBox(height: 8),
+                        // Text(
+                        //   'Portal Mahasiswa',
+                        //   style: TextStyle(
+                        //     fontSize: 16,
+                        //     color: Colors.grey[600],
+                        //     fontWeight: FontWeight.w500,
+                        //   ),
+                        // ),
                       ],
                     ),
                   ),
 
                   // Welcome Text
                   Container(
-                    margin: const EdgeInsets.only(bottom: 32),
+                    margin: const EdgeInsets.only(bottom: 28),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Selamat Datang',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.grey[800],
-                            height: 1.3,
-                          ),
-                        ),
+                        // Text(
+                        //   'Selamat Datang',
+                        //   style: TextStyle(
+                        //     fontSize: 20,
+                        //     fontWeight: FontWeight.w700,
+                        //     color: Colors.grey[800],
+                        //     height: 1.3,
+                        //   ),
+                        // ),
                         Text(
                           'Silakan masuk ke akun Anda',
                           style: TextStyle(
@@ -741,7 +763,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   // Footer Section (untuk pembuatan akun)
                   Container(
-                    margin: const EdgeInsets.only(top: 32),
+                    margin: const EdgeInsets.only(top: 28),
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: Colors.grey[50],
@@ -797,7 +819,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   // Version/Footer
                   Container(
-                    margin: EdgeInsets.only(top: screenHeight * 0.05),
+                    margin: EdgeInsets.only(top: screenHeight * 0.04),
                     child: Text(
                       'v1.0.0 • Campus App © 2024',
                       style: TextStyle(
