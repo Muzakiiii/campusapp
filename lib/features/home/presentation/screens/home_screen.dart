@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:campusapp/core/themes/app_theme.dart';
 import 'package:campusapp/features/events/data/repositories/event_repository.dart';
 import 'package:campusapp/features/events/domain/models/event_model.dart';
@@ -21,6 +22,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _showAllEvents = false;
   final ScrollController _scrollController = ScrollController();
   final EventRepository _eventRepository = EventRepository();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   @override
   void dispose() {
@@ -37,54 +40,75 @@ class _HomeScreenState extends State<HomeScreen> {
     final isSmallScreen = size.height < 700;
 
     final greeting = _getGreeting();
-    final displayUserId = widget.userId ?? 'GUEST';
+    final currentUser = _auth.currentUser;
 
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: _buildHeader(context, displayUserId, greeting),
+      appBar: _buildHeader(context, greeting, currentUser),
       body: SafeArea(
         bottom: false,
-        child: StreamBuilder<List<EventModel>>(
-          stream: _eventRepository.getAllEventsStream(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
+        child: StreamBuilder<DocumentSnapshot>(
+          stream: currentUser != null
+              ? _firestore.collection('users').doc(currentUser.uid).snapshots()
+              : null,
+          builder: (context, userSnapshot) {
+            // Handle loading state
+            if (userSnapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
 
-            final allEvents = snapshot.data ?? [];
+            // Get user name from Firestore or use default
+            String userName = 'User';
+            if (userSnapshot.hasData && userSnapshot.data != null && userSnapshot.data!.exists) {
+              final userData = userSnapshot.data!.data() as Map<String, dynamic>?;
+              if (userData != null && userData.containsKey('name')) {
+                userName = userData['name'] ?? 'User';
+              }
+            }
 
-            // 🔥 UPCOMING pakai event.tanggal
-            final upcomingEvents = allEvents
-                .where((e) => e.tanggal.isAfter(DateTime.now()))
-                .toList();
+            return StreamBuilder<List<EventModel>>(
+              stream: _eventRepository.getAllEventsStream(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-            return SingleChildScrollView(
-              controller: _scrollController,
-              padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: isSmallScreen ? 10 : 20,
-                bottom: 20,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildGreetingSection(greeting, displayUserId),
-                  const SizedBox(height: 25),
+                final allEvents = snapshot.data ?? [];
 
-                  _buildRecommendedEventsSection(
-                    isSmallScreen,
-                    allEvents,
+                // 🔥 UPCOMING pakai event.tanggal
+                final upcomingEvents = allEvents
+                    .where((e) => e.tanggal.isAfter(DateTime.now()))
+                    .toList();
+
+                return SingleChildScrollView(
+                  controller: _scrollController,
+                  padding: EdgeInsets.only(
+                    left: 20,
+                    right: 20,
+                    top: isSmallScreen ? 10 : 20,
+                    bottom: 20,
                   ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildGreetingSection(greeting, userName),
+                      const SizedBox(height: 25),
 
-                  const SizedBox(height: 25),
+                      _buildRecommendedEventsSection(
+                        isSmallScreen,
+                        allEvents,
+                      ),
 
-                  _buildUpcomingEventsSection(
-                    isSmallScreen,
-                    upcomingEvents,
+                      const SizedBox(height: 25),
+
+                      _buildUpcomingEventsSection(
+                        isSmallScreen,
+                        upcomingEvents,
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                );
+              },
             );
           },
         ),
@@ -308,7 +332,7 @@ class _HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute(
         builder: (context) => EventRegistrationScreen(
           event: event,
-          userId: widget.userId ?? 'GUEST',
+          userId: _auth.currentUser?.uid ?? 'GUEST',
         ),
       ),
     );
@@ -322,15 +346,27 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // =========================
-  // HEADER
+  // HEADER - FIXED
   // =========================
-  PreferredSizeWidget _buildHeader(
-    BuildContext context,
-    String userId,
-    String greeting,
-  ) {
+  PreferredSizeWidget _buildHeader(BuildContext context, String greeting, User? currentUser) {
     return AppBar(
-      title: Text('$greeting, $userId'),
+      title: StreamBuilder<DocumentSnapshot>(
+        stream: currentUser != null
+            ? _firestore.collection('users').doc(currentUser.uid).snapshots()
+            : null,
+        builder: (context, snapshot) {
+          String userName = 'User';
+          
+          if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
+            final userData = snapshot.data!.data() as Map<String, dynamic>?;
+            if (userData != null && userData.containsKey('name')) {
+              userName = userData['name'] ?? 'User';
+            }
+          }
+          
+          return Text('$greeting, $userName');
+        },
+      ),
       actions: [
         IconButton(
           icon: const Icon(Icons.leaderboard),
@@ -346,23 +382,25 @@ class _HomeScreenState extends State<HomeScreen> {
         IconButton(
           icon: const Icon(Icons.notifications),
           onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => NotificationsScreen(
-                 userId: FirebaseAuth.instance.currentUser!.uid,
+            if (currentUser != null) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => NotificationsScreen(
+                    userId: currentUser.uid,
+                  ),
                 ),
-              ),
-            );
+              );
+            }
           },
         ),
       ],
     );
   }
 
-  Widget _buildGreetingSection(String greeting, String userId) {
+  Widget _buildGreetingSection(String greeting, String userName) {
     return Text(
-      '$greeting, $userId',
+      '$greeting, $userName',
       style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
     );
   }
