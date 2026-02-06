@@ -1,4 +1,5 @@
 // lib/features/events/presentation/screens/payment_screen.dart
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -31,18 +32,85 @@ class _PaymentScreenState extends State<PaymentScreen> {
   late TextEditingController _noteController;
   bool _isUploading = false;
   bool _showProofUpload = false;
+  bool _isLoading = true; // TAMBAH: untuk loading state
+  bool _isCreatingPayment = false; // TAMBAH: untuk pembuatan payment
+  String? _errorMessage; // TAMBAH: untuk error message
 
   @override
   void initState() {
     super.initState();
     _noteController = TextEditingController();
-    _createPayment();
+    _initializePayment();
   }
 
   @override
   void dispose() {
     _noteController.dispose();
     super.dispose();
+  }
+
+  // ======================
+  // INITIALIZE PAYMENT
+  // ======================
+  Future<void> _initializePayment() async {
+    if (_isCreatingPayment) return; // Prevent multiple calls
+    
+    setState(() {
+      _isLoading = true;
+      _isCreatingPayment = true;
+      _errorMessage = null;
+    });
+
+    try {
+      print('🔄 Initializing payment for event: ${widget.event.judul}');
+      print('👤 User ID: ${widget.userId}');
+      
+      // Check if payment already exists for this event and user
+      final existingPayment = await _paymentRepository.getPaymentByEventAndUser(
+        widget.event.id,
+        widget.userId,
+      );
+      
+      if (existingPayment != null) {
+        print('✅ Found existing payment: ${existingPayment.id}');
+        setState(() {
+          _createdPayment = existingPayment;
+          _selectedMethod = existingPayment.method;
+          _errorMessage = null;
+        });
+      } else {
+        print('🆕 Creating new payment...');
+        // Create new payment
+        _createdPayment = await _paymentRepository.createPayment(
+          event: widget.event,
+          userId: widget.userId,
+          method: PaymentMethod.transferBank,
+        );
+        
+        _selectedMethod = PaymentMethod.transferBank;
+        print('✅ New payment created: ${_createdPayment!.id}');
+      }
+      
+      setState(() {
+        _isLoading = false;
+        _isCreatingPayment = false;
+      });
+      
+    } on TimeoutException catch (e) {
+      print('⏰ Timeout in initializePayment: $e');
+      setState(() {
+        _isLoading = false;
+        _isCreatingPayment = false;
+        _errorMessage = 'Koneksi timeout. Cek koneksi internet Anda.';
+      });
+    } catch (e) {
+      print('❌ Error in initializePayment: $e');
+      setState(() {
+        _isLoading = false;
+        _isCreatingPayment = false;
+        _errorMessage = 'Gagal memuat pembayaran: ${e.toString().replaceAll('Exception: ', '')}';
+      });
+    }
   }
 
   // ======================
@@ -55,35 +123,208 @@ class _PaymentScreenState extends State<PaymentScreen> {
         )}';
   }
 
-  Future<void> _createPayment() async {
-    _createdPayment = await _paymentRepository.createPayment(
-      event: widget.event,
-      userId: widget.userId,
-      method: PaymentMethod.transferBank,
-    );
-    _selectedMethod = PaymentMethod.transferBank;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Pembayaran Event'),
       ),
-      body: _createdPayment == null ? _buildLoading() : _buildContent(theme),
+      body: _buildBody(),
     );
   }
 
+  Widget _buildBody() {
+    if (_isLoading) {
+      return _buildLoading();
+    }
+    
+    if (_errorMessage != null) {
+      return _buildErrorView();
+    }
+    
+    if (_createdPayment == null) {
+      return _buildEmptyView();
+    }
+    
+    return _buildContent(Theme.of(context));
+  }
+
   Widget _buildLoading() {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('Menyiapkan pembayaran...'),
+          SizedBox(
+            width: 50,
+            height: 50,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Menyiapkan pembayaran...',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Mohon tunggu sebentar',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 20),
+          if (_isCreatingPayment)
+            OutlinedButton(
+              onPressed: () {
+                // Option to cancel? Or just show it's processing
+              },
+              child: const Text('Sedang diproses...'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 64,
+              color: Colors.red,
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Gagal Memuat Pembayaran',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.red,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                _errorMessage ?? 'Terjadi kesalahan yang tidak diketahui',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 30),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton(
+                  onPressed: _initializePayment,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  ),
+                  child: const Text('Coba Lagi'),
+                ),
+                const SizedBox(width: 16),
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  ),
+                  child: const Text('Kembali'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            TextButton(
+              onPressed: () {
+                // Show technical details for debugging
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Detail Teknis'),
+                    content: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('Event: ${widget.event.judul}'),
+                          Text('Event ID: ${widget.event.id}'),
+                          Text('User ID: ${widget.userId}'),
+                          const SizedBox(height: 10),
+                          Text('Error: $_errorMessage'),
+                        ],
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Tutup'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+              child: const Text(
+                'Lihat detail teknis',
+                style: TextStyle(fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.payment_outlined,
+            size: 64,
+            color: Colors.grey.shade400,
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Data pembayaran tidak ditemukan',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Silahkan coba buat pembayaran baru',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 30),
+          ElevatedButton(
+            onPressed: _initializePayment,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+            ),
+            child: const Text('Buat Pembayaran Baru'),
+          ),
+          const SizedBox(height: 10),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Kembali ke Event'),
+          ),
         ],
       ),
     );
@@ -340,7 +581,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   // ======================
-  // UPLOAD BUKTI (FIXED FOR WEB)
+  // UPLOAD BUKTI
   // ======================
   Widget _buildPaymentProofUpload(ThemeData theme) {
     final primaryColor = theme.colorScheme.primary;
@@ -492,7 +733,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   // ======================
-  // IMAGE PICKER (FIXED FOR WEB)
+  // IMAGE PICKER
   // ======================
   Future<void> _pickImage() async {
     try {
@@ -511,7 +752,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal memilih gambar: $e'),
+          content: Text('Gagal memilih gambar: ${e.toString()}'),
           backgroundColor: Colors.red,
         ),
       );
@@ -543,11 +784,19 @@ class _PaymentScreenState extends State<PaymentScreen> {
       });
 
       _showSuccessDialog();
+    } on TimeoutException catch (e) {
+      setState(() => _isUploading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Upload timeout. Coba lagi.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
     } catch (e) {
       setState(() => _isUploading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal upload bukti: $e'),
+          content: Text('Gagal upload bukti: ${e.toString().replaceAll('Exception: ', '')}'),
           backgroundColor: Colors.red,
         ),
       );
