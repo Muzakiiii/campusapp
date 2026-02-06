@@ -281,6 +281,8 @@ class EventModel {
     return 'Rp $hargaOffline';
   }
 
+  get tags => null;
+
   @override
   String toString() {
     return 'EventModel(id: $id, judul: $judul, kategori: $kategori, tanggal: $dateText)';

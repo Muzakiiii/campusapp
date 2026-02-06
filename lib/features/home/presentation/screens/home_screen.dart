@@ -31,9 +31,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // =========================
-  // MAIN BUILD
-  // =========================
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -52,14 +49,14 @@ class _HomeScreenState extends State<HomeScreen> {
               ? _firestore.collection('users').doc(currentUser.uid).snapshots()
               : null,
           builder: (context, userSnapshot) {
-            // Handle loading state
             if (userSnapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
 
-            // Get user name from Firestore or use default
             String userName = 'User';
-            if (userSnapshot.hasData && userSnapshot.data != null && userSnapshot.data!.exists) {
+            if (userSnapshot.hasData &&
+                userSnapshot.data != null &&
+                userSnapshot.data!.exists) {
               final userData = userSnapshot.data!.data() as Map<String, dynamic>?;
               if (userData != null && userData.containsKey('name')) {
                 userName = userData['name'] ?? 'User';
@@ -74,8 +71,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
 
                 final allEvents = snapshot.data ?? [];
-
-                // 🔥 UPCOMING pakai event.tanggal
                 final upcomingEvents = allEvents
                     .where((e) => e.tanggal.isAfter(DateTime.now()))
                     .toList();
@@ -93,18 +88,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       _buildGreetingSection(greeting, userName),
                       const SizedBox(height: 25),
-
-                      _buildRecommendedEventsSection(
-                        isSmallScreen,
-                        allEvents,
-                      ),
-
+                      _buildRecommendedEventsSection(isSmallScreen, allEvents),
                       const SizedBox(height: 25),
-
-                      _buildUpcomingEventsSection(
-                        isSmallScreen,
-                        upcomingEvents,
-                      ),
+                      _buildUpcomingEventsSection(isSmallScreen, upcomingEvents),
                     ],
                   ),
                 );
@@ -116,16 +102,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // =========================
-  // RECOMMENDED
-  // =========================
   Widget _buildRecommendedEventsSection(
     bool isSmallScreen,
     List<EventModel> allEvents,
   ) {
-    final recommendedEvents = _showAllEvents
-        ? allEvents
-        : allEvents.take(4).toList();
+    final recommendedEvents =
+        _showAllEvents ? allEvents : allEvents.take(4).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -152,19 +134,18 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 15),
+        const SizedBox(height: 12),
         SizedBox(
-          height: isSmallScreen ? 210 : 240,
+          height: 280, // DIPERBESAR LAGI dari 260 ke 280
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: recommendedEvents.length,
             itemBuilder: (context, index) {
               final event = recommendedEvents[index];
-
               return Container(
-                width: isSmallScreen ? 180 : 200,
+                width: 180,
                 margin: EdgeInsets.only(
-                  right: index < recommendedEvents.length - 1 ? 15 : 0,
+                  right: index < recommendedEvents.length - 1 ? 12 : 0,
                 ),
                 child: _buildEventCard(event),
               );
@@ -175,9 +156,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // =========================
-  // UPCOMING
-  // =========================
   Widget _buildUpcomingEventsSection(
     bool isSmallScreen,
     List<EventModel> upcomingEvents,
@@ -205,7 +183,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 15),
+        const SizedBox(height: 12),
         ListView.builder(
           physics: const NeverScrollableScrollPhysics(),
           shrinkWrap: true,
@@ -219,110 +197,339 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // =========================
-  // EVENT CARD
-  // =========================
   Widget _buildEventCard(EventModel event) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              color: event.categoryColor.withOpacity(0.8),
-            ),
-            child: Stack(
-              children: [
-                Center(
-                  child: Icon(
-                    event.categoryIcon,
-                    size: 50,
-                    color: Colors.white.withOpacity(0.3),
-                  ),
-                ),
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: IconButton(
-                    icon: Icon(
-                      event.isBookmarked
-                          ? Icons.bookmark
-                          : Icons.bookmark_border,
-                      color: Colors.white,
+    return SizedBox(
+      width: 180,
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        margin: EdgeInsets.zero,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Bagian gambar dengan fixed height
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(12),
+              ),
+              child: Container(
+                height: 140, // DIPERBESAR dari 130 ke 140
+                width: double.infinity,
+                color: event.categoryColor.withOpacity(0.8),
+                child: Stack(
+                  children: [
+                    if (event.posterUrl.isNotEmpty)
+                      Image.network(
+                        event.posterUrl,
+                        width: double.infinity,
+                        height: double.infinity,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Center(
+                            child: CircularProgressIndicator(
+                              value: loadingProgress.expectedTotalBytes != null
+                                  ? loadingProgress.cumulativeBytesLoaded /
+                                      loadingProgress.expectedTotalBytes!
+                                  : null,
+                            ),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return _buildDefaultEventIcon(event);
+                        },
+                      )
+                    else
+                      _buildDefaultEventIcon(event),
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.4),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: Icon(
+                            event.isBookmarked
+                                ? Icons.bookmark
+                                : Icons.bookmark_border,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                          onPressed: () async {
+                            await _eventRepository.toggleBookmark(
+                              event.id,
+                              event.isBookmarked,
+                            );
+                          },
+                        ),
+                      ),
                     ),
-                    onPressed: () async {
-                      await _eventRepository.toggleBookmark(
-                        event.id,
-                        event.isBookmarked,
-                      );
-                    },
+                  ],
+                ),
+              ),
+            ),
+            // Bagian konten - DIKURANGI KONTENNYA
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Judul saja, tanpa batasan maxLines yang ketat
+                  Text(
+                    event.judul,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      height: 1.2, // DIKECILKAN dari 1.3
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 8),
+                  
+                  // Hanya Kategori dan Lokasi
+                  Row(
+                    children: [
+                      // Kategori
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          event.kategori,
+                          style: TextStyle(
+                            fontSize: 10, // DIKECILKAN
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      
+                      // Status Harga
+                      Text(
+                        event.isGratis ? 'Gratis' : 'Berbayar',
+                        style: TextStyle(
+                          fontSize: 10, // DIKECILKAN
+                          color: event.isGratis ? Colors.green : Colors.orange,
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 8),
+                  
+                  // Lokasi saja
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.location_on,
+                        size: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          event.lokasi,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  // HAPUS WAKTU untuk menghemat ruang
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDefaultEventIcon(EventModel event) {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: event.categoryColor.withOpacity(0.8),
+      child: Center(
+        child: Icon(
+          event.categoryIcon,
+          size: 40,
+          color: Colors.white.withOpacity(0.3),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUpcomingTile(EventModel event) {
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Judul
+            Text(
+              event.judul,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 15,
+                height: 1.3,
+              ),
+            ),
+            
+            const SizedBox(height: 12),
+            
+            // Info dasar: Tanggal & Lokasi saja
+            Row(
+              children: [
+                Icon(
+                  Icons.calendar_today,
+                  size: 14,
+                  color: Colors.grey.shade600,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    event.dateText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade700,
+                    ),
                   ),
                 ),
               ],
             ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          event.judul, // ✅ FIX
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          event.lokasi, // ✅ FIX
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-        ),
-      ],
-    );
-  }
-
-  // =========================
-  // UPCOMING TILE
-  // =========================
-  Widget _buildUpcomingTile(EventModel event) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 15),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            event.judul, // ✅ FIX
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          Text('${event.dateText} • ${event.jamMulai}'), // ✅ FIX
-          const SizedBox(height: 6),
-          Text(event.lokasi), // ✅ FIX
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () {
-                _navigateToEventRegistration(context, event);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-              ),
-              child: const Text('Daftar Sekarang'),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(
+                  Icons.location_on,
+                  size: 14,
+                  color: Colors.grey.shade600,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    event.lokasi,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
+            
+            // Kategori dan Status - dalam satu baris
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                // Kategori
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    event.kategori,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                
+                // Status Harga
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: event.isGratis 
+                      ? Colors.green.withOpacity(0.1) 
+                      : Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    event.isGratis ? 'Gratis' : 'Berbayar',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: event.isGratis ? Colors.green : Colors.orange,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            
+            // Button Daftar
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  _navigateToEventRegistration(context, event);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text(
+                  'Daftar Sekarang',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  // =========================
-  // NAV + HELPERS
-  // =========================
   void _navigateToEventRegistration(
     BuildContext context,
     EventModel event,
@@ -345,10 +552,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'Good Evening';
   }
 
-  // =========================
-  // HEADER - FIXED
-  // =========================
-  PreferredSizeWidget _buildHeader(BuildContext context, String greeting, User? currentUser) {
+  PreferredSizeWidget _buildHeader(
+      BuildContext context, String greeting, User? currentUser) {
     return AppBar(
       title: StreamBuilder<DocumentSnapshot>(
         stream: currentUser != null
@@ -356,14 +561,16 @@ class _HomeScreenState extends State<HomeScreen> {
             : null,
         builder: (context, snapshot) {
           String userName = 'User';
-          
-          if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
+
+          if (snapshot.hasData &&
+              snapshot.data != null &&
+              snapshot.data!.exists) {
             final userData = snapshot.data!.data() as Map<String, dynamic>?;
             if (userData != null && userData.containsKey('name')) {
               userName = userData['name'] ?? 'User';
             }
           }
-          
+
           return Text('$greeting, $userName');
         },
       ),
@@ -401,7 +608,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildGreetingSection(String greeting, String userName) {
     return Text(
       '$greeting, $userName',
-      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+      style: const TextStyle(
+        fontSize: 24,
+        fontWeight: FontWeight.bold,
+        height: 1.2,
+      ),
     );
   }
 }
