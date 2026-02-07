@@ -321,7 +321,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           childAspectRatio: 1.2,
           children: [
             StatsCard(
-              title: 'Menunggu Verifikasi',
+              title: 'Menunggu Verif',
               value: '${_stats['pendingPayments']}',
               icon: Icons.pending_actions,
               color: AppColors.warning,
